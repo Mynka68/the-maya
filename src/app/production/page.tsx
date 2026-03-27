@@ -11,8 +11,8 @@ interface Production {
   numero_lot_produit: string
   statut: string
   notes: string | null
-  produits_finis: { nom: string }
-  production_lots: { quantite_utilisee: number; lots: { numero_lot: string; matieres_premieres: { nom: string } } }[]
+  produits_finis: { nom: string } | null
+  production_lots: { quantite_utilisee: number; lots: { numero_lot: string; matieres_premieres: { nom: string } | null } | null }[]
 }
 
 const statutLabels: Record<string, string> = { en_cours: 'En cours', terminee: 'Terminée', annulee: 'Annulée' }
@@ -30,7 +30,7 @@ export default function ProductionPage() {
       .from('productions')
       .select('*, produits_finis(nom), production_lots(quantite_utilisee, lots(numero_lot, matieres_premieres(nom)))')
       .order('date_production', { ascending: false })
-    setProductions(data || [])
+    setProductions((data as unknown as Production[]) || [])
     setLoading(false)
   }
 

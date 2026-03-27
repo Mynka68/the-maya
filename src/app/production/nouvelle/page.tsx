@@ -10,7 +10,7 @@ interface Lot {
   numero_lot: string
   quantite_restante: number
   date_peremption: string
-  matieres_premieres: { nom: string; unite: string }
+  matieres_premieres: { nom: string; unite: string } | null
 }
 interface LotUsage { lot_id: string; quantite_utilisee: string }
 
@@ -34,8 +34,8 @@ export default function NouvelleProductionPage() {
         .gt('quantite_restante', 0)
         .order('date_peremption', { ascending: true }),
     ]).then(([p, l]) => {
-      setProduits(p.data || [])
-      setLotsDisponibles(l.data || [])
+      setProduits(p.data as ProduitFini[] || [])
+      setLotsDisponibles((l.data as unknown as Lot[]) || [])
     })
   }, [])
 

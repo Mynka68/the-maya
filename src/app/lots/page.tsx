@@ -12,7 +12,7 @@ interface Lot {
   date_peremption: string
   statut: string
   notes: string | null
-  matieres_premieres: { nom: string; categorie: string; unite: string }
+  matieres_premieres: { nom: string; categorie: string; unite: string } | null
   receptions: { date_reception: string; fournisseurs: { nom: string } | null } | null
 }
 
@@ -43,7 +43,7 @@ export default function LotsPage() {
       .from('lots')
       .select('*, matieres_premieres(nom, categorie, unite), receptions(date_reception, fournisseurs(nom))')
       .order('date_peremption', { ascending: true })
-    setLots(data || [])
+    setLots((data as unknown as Lot[]) || [])
     setLoading(false)
   }
 

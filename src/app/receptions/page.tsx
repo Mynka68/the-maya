@@ -24,7 +24,7 @@ export default function ReceptionsPage() {
       .from('receptions')
       .select('*, fournisseurs(nom), lots(id)')
       .order('date_reception', { ascending: false })
-    setReceptions(data || [])
+    setReceptions((data as unknown as Reception[]) || [])
     setLoading(false)
   }
 

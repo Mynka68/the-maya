@@ -10,7 +10,7 @@ interface Lot {
   quantite_restante: number
   date_peremption: string
   statut: string
-  matieres_premieres: { nom: string; unite: string }
+  matieres_premieres: { nom: string; unite: string } | null
 }
 
 interface Production {
@@ -19,7 +19,7 @@ interface Production {
   date_production: string
   quantite_produite: number
   statut: string
-  produits_finis: { nom: string }
+  produits_finis: { nom: string } | null
 }
 
 export default function Dashboard() {
@@ -63,8 +63,8 @@ export default function Dashboard() {
         .select('id', { count: 'exact' }),
     ])
 
-    setLotsExpiring(lotsRes.data || [])
-    setRecentProductions(prodsRes.data || [])
+    setLotsExpiring((lotsRes.data as unknown as Lot[]) || [])
+    setRecentProductions((prodsRes.data as unknown as Production[]) || [])
     setStats({
       lotsDisponibles: statsLotsRes.count || 0,
       productionsMois: statsProdRes.count || 0,
