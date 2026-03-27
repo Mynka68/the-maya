@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import Sidebar from "@/components/Sidebar";
+import { AuthProvider } from "@/contexts/AuthContext";
+import AuthenticatedLayout from "@/components/AuthenticatedLayout";
 
 export const metadata: Metadata = {
   title: "Thé Maya - Gestion de Production",
@@ -15,8 +16,9 @@ export default function RootLayout({
   return (
     <html lang="fr" className="h-full antialiased">
       <body className="min-h-full flex">
-        <Sidebar />
-        <main className="flex-1 ml-64 p-8">{children}</main>
+        <AuthProvider>
+          <AuthenticatedLayout>{children}</AuthenticatedLayout>
+        </AuthProvider>
       </body>
     </html>
   );
