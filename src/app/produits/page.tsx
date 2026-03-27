@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import DocumentManager from '@/components/DocumentManager'
 
 interface Produit {
   id: string
@@ -14,13 +15,30 @@ export default function ProduitsPage() {
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [docCounts, setDocCounts] = useState<Record<string, number>>({})
   const [form, setForm] = useState({ nom: '', description: '' })
 
   useEffect(() => { load() }, [])
 
   async function load() {
     const { data } = await supabase.from('produits_finis').select('*').order('nom')
-    setProduits(data || [])
+    const items = data || []
+    setProduits(items)
+
+    if (items.length > 0) {
+      const { data: docs } = await supabase
+        .from('documents')
+        .select('entity_id')
+        .eq('entity_type', 'produit_fini')
+        .in('entity_id', items.map(p => p.id))
+      const counts: Record<string, number> = {}
+      docs?.forEach((d: { entity_id: string }) => {
+        counts[d.entity_id] = (counts[d.entity_id] || 0) + 1
+      })
+      setDocCounts(counts)
+    }
+
     setLoading(false)
   }
 
@@ -45,6 +63,15 @@ export default function ProduitsPage() {
 
   async function remove(id: string) {
     if (!confirm('Supprimer ce produit fini ?')) return
+    const { data: docs } = await supabase
+      .from('documents')
+      .select('fichier_path')
+      .eq('entity_type', 'produit_fini')
+      .eq('entity_id', id)
+    if (docs && docs.length > 0) {
+      await supabase.storage.from('documents').remove(docs.map(d => d.fichier_path))
+      await supabase.from('documents').delete().eq('entity_type', 'produit_fini').eq('entity_id', id)
+    }
     await supabase.from('produits_finis').delete().eq('id', id)
     load()
   }
@@ -81,23 +108,49 @@ export default function ProduitsPage() {
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nom</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Docs techniques</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y">
               {produits.map((p) => (
-                <tr key={p.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 font-medium">{p.nom}</td>
-                  <td className="px-6 py-4 text-gray-500">{p.description || '-'}</td>
-                  <td className="px-6 py-4 text-right">
-                    <button onClick={() => edit(p)} className="text-primary hover:underline text-sm mr-3">Modifier</button>
-                    <button onClick={() => remove(p.id)} className="text-red-500 hover:underline text-sm">Supprimer</button>
-                  </td>
-                </tr>
+                <>
+                  <tr key={p.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 font-medium">{p.nom}</td>
+                    <td className="px-6 py-4">
+                      {docCounts[p.id] ? (
+                        <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-sm font-medium">
+                          📎 {docCounts[p.id]}
+                        </span>
+                      ) : (
+                        <span className="text-gray-400 text-sm">-</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 text-gray-500">{p.description || '-'}</td>
+                    <td className="px-6 py-4 text-right space-x-2">
+                      <button onClick={() => setExpandedId(expandedId === p.id ? null : p.id)} className="text-primary hover:underline text-sm">
+                        {expandedId === p.id ? 'Fermer' : '📎 Documents'}
+                      </button>
+                      <button onClick={() => edit(p)} className="text-primary hover:underline text-sm">Modifier</button>
+                      <button onClick={() => remove(p.id)} className="text-red-500 hover:underline text-sm">Supprimer</button>
+                    </td>
+                  </tr>
+                  {expandedId === p.id && (
+                    <tr key={`${p.id}-docs`}>
+                      <td colSpan={4} className="px-6 py-4 bg-gray-50/50">
+                        <DocumentManager
+                          entityType="produit_fini"
+                          entityId={p.id}
+                          label="Documents techniques produit (fiches Thé Maya)"
+                        />
+                      </td>
+                    </tr>
+                  )}
+                </>
               ))}
               {produits.length === 0 && (
-                <tr><td colSpan={3} className="px-6 py-8 text-center text-gray-400">Aucun produit fini</td></tr>
+                <tr><td colSpan={4} className="px-6 py-8 text-center text-gray-400">Aucun produit fini</td></tr>
               )}
             </tbody>
           </table>
