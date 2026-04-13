@@ -13,6 +13,7 @@ const navItems = [
   { href: '/matieres', label: 'Matières premières', icon: '🍃' },
   { href: '/produits', label: 'Produits finis', icon: '☕' },
   { href: '/fournisseurs', label: 'Fournisseurs', icon: '🤝' },
+  { href: '/audit', label: 'Audit / Traçabilité', icon: '🔍' },
   { href: '/utilisateurs', label: 'Utilisateurs', icon: '👥', adminOnly: true },
 ]
 
