@@ -4,8 +4,15 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 
 interface LotRaw {
+  id: string
   matiere_premiere_id: string
+  numero_lot: string
+  quantite_recue: number
   quantite_restante: number
+  date_fabrication: string | null
+  date_peremption: string
+  statut: string
+  notes: string | null
   matieres_premieres: { nom: string; categorie: string; unite: string } | null
 }
 
@@ -30,20 +37,58 @@ const categorieColors: Record<string, string> = {
   emballage: 'bg-blue-100 text-blue-800',
 }
 
+const statutLabels: Record<string, string> = {
+  disponible: 'Disponible',
+  en_cours: 'En cours',
+  epuise: 'Épuisé',
+  perime: 'Périmé',
+}
+
+const statutColors: Record<string, string> = {
+  disponible: 'bg-green-100 text-green-800',
+  en_cours: 'bg-yellow-100 text-yellow-800',
+  epuise: 'bg-gray-100 text-gray-600',
+  perime: 'bg-red-100 text-red-800',
+}
+
+function getPeremptionColor(dateStr: string): string {
+  const today = new Date()
+  const peremption = new Date(dateStr)
+  const diffDays = Math.ceil((peremption.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+  if (diffDays < 0) return 'text-red-600 font-semibold'
+  if (diffDays <= 30) return 'text-red-500'
+  if (diffDays <= 60) return 'text-orange-500'
+  return 'text-gray-700'
+}
+
+function getPeremptionLabel(dateStr: string): string | null {
+  const today = new Date()
+  const peremption = new Date(dateStr)
+  const diffDays = Math.ceil((peremption.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+  if (diffDays < 0) return 'Périmé'
+  if (diffDays <= 30) return `${diffDays}j`
+  if (diffDays <= 60) return `${diffDays}j`
+  return null
+}
+
 export default function StocksPage() {
   const [stocks, setStocks] = useState<StockLine[]>([])
+  const [allLots, setAllLots] = useState<LotRaw[]>([])
   const [loading, setLoading] = useState(true)
   const [filterCategorie, setFilterCategorie] = useState('')
+  const [expandedId, setExpandedId] = useState<string | null>(null)
 
   useEffect(() => { load() }, [])
 
   async function load() {
     const { data } = await supabase
       .from('lots')
-      .select('matiere_premiere_id, quantite_restante, matieres_premieres(nom, categorie, unite)')
+      .select('id, matiere_premiere_id, numero_lot, quantite_recue, quantite_restante, date_fabrication, date_peremption, statut, notes, matieres_premieres(nom, categorie, unite)')
       .in('statut', ['disponible', 'en_cours'])
+      .order('date_peremption', { ascending: true })
 
     const lots = (data as unknown as LotRaw[]) || []
+    setAllLots(lots)
 
     // Agréger par matière première
     const map = new Map<string, StockLine>()
@@ -73,6 +118,10 @@ export default function StocksPage() {
     if (stock.stock_total <= 0) return <span className="text-xs px-2 py-1 rounded-full bg-red-100 text-red-800 font-medium">Rupture</span>
     if (stock.nb_lots <= 1) return <span className="text-xs px-2 py-1 rounded-full bg-orange-100 text-orange-800 font-medium">Faible</span>
     return <span className="text-xs px-2 py-1 rounded-full bg-green-100 text-green-800 font-medium">OK</span>
+  }
+
+  function getLotsForMatiere(matiereId: string): LotRaw[] {
+    return allLots.filter(l => l.matiere_premiere_id === matiereId)
   }
 
   const filtered = stocks.filter(s => {
@@ -126,19 +175,93 @@ export default function StocksPage() {
               </tr>
             </thead>
             <tbody className="divide-y">
-              {filtered.map((s) => (
-                <tr key={s.matiere_premiere_id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 font-medium">{s.nom}</td>
-                  <td className="px-6 py-4">
-                    <span className={`text-xs px-2 py-1 rounded-full ${categorieColors[s.categorie] || ''}`}>
-                      {categorieLabels[s.categorie] || s.categorie}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-right font-medium">{s.stock_total.toFixed(2)} {s.unite}</td>
-                  <td className="px-6 py-4 text-right">{s.nb_lots}</td>
-                  <td className="px-6 py-4">{niveauBadge(s)}</td>
-                </tr>
-              ))}
+              {filtered.map((s) => {
+                const isExpanded = expandedId === s.matiere_premiere_id
+                const lotsDetail = isExpanded ? getLotsForMatiere(s.matiere_premiere_id) : []
+                return (
+                  <>
+                    <tr
+                      key={s.matiere_premiere_id}
+                      className="hover:bg-gray-50 cursor-pointer"
+                      onClick={() => setExpandedId(isExpanded ? null : s.matiere_premiere_id)}
+                    >
+                      <td className="px-6 py-4 font-medium">
+                        <div className="flex items-center gap-2">
+                          <span className={`text-xs transition-transform ${isExpanded ? 'rotate-90' : ''}`}>▶</span>
+                          <span className="text-primary hover:underline">{s.nom}</span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className={`text-xs px-2 py-1 rounded-full ${categorieColors[s.categorie] || ''}`}>
+                          {categorieLabels[s.categorie] || s.categorie}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-right font-medium">{s.stock_total.toFixed(2)} {s.unite}</td>
+                      <td className="px-6 py-4 text-right">{s.nb_lots}</td>
+                      <td className="px-6 py-4">{niveauBadge(s)}</td>
+                    </tr>
+                    {isExpanded && (
+                      <tr key={`${s.matiere_premiere_id}-detail`}>
+                        <td colSpan={5} className="px-6 py-0">
+                          <div className="bg-gray-50 rounded-lg my-2 overflow-hidden border">
+                            <table className="w-full">
+                              <thead>
+                                <tr className="bg-gray-100">
+                                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">N° Lot</th>
+                                  <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Qté reçue</th>
+                                  <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Qté restante</th>
+                                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Date fab.</th>
+                                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Date péremption</th>
+                                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Statut</th>
+                                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Notes</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-gray-200">
+                                {lotsDetail.map((lot) => {
+                                  const usedPercent = lot.quantite_recue > 0
+                                    ? ((lot.quantite_recue - lot.quantite_restante) / lot.quantite_recue * 100).toFixed(0)
+                                    : '0'
+                                  const peremptionLabel = getPeremptionLabel(lot.date_peremption)
+                                  return (
+                                    <tr key={lot.id} className="hover:bg-white">
+                                      <td className="px-4 py-2.5 text-sm font-mono">{lot.numero_lot}</td>
+                                      <td className="px-4 py-2.5 text-sm text-right">{lot.quantite_recue} {s.unite}</td>
+                                      <td className="px-4 py-2.5 text-sm text-right">
+                                        <span className={lot.quantite_restante === 0 ? 'text-gray-400' : 'font-medium'}>
+                                          {lot.quantite_restante} {s.unite}
+                                        </span>
+                                        {Number(usedPercent) > 0 && (
+                                          <span className="text-xs text-gray-400 ml-1">({usedPercent}%)</span>
+                                        )}
+                                      </td>
+                                      <td className="px-4 py-2.5 text-sm text-gray-500">{lot.date_fabrication || '-'}</td>
+                                      <td className="px-4 py-2.5 text-sm">
+                                        <span className={getPeremptionColor(lot.date_peremption)}>{lot.date_peremption}</span>
+                                        {peremptionLabel && (
+                                          <span className={`text-xs ml-1 ${getPeremptionColor(lot.date_peremption)}`}>({peremptionLabel})</span>
+                                        )}
+                                      </td>
+                                      <td className="px-4 py-2.5">
+                                        <span className={`text-xs px-2 py-0.5 rounded-full ${statutColors[lot.statut] || 'bg-gray-100 text-gray-600'}`}>
+                                          {statutLabels[lot.statut] || lot.statut}
+                                        </span>
+                                      </td>
+                                      <td className="px-4 py-2.5 text-sm text-gray-500">{lot.notes || '-'}</td>
+                                    </tr>
+                                  )
+                                })}
+                                {lotsDetail.length === 0 && (
+                                  <tr><td colSpan={7} className="px-4 py-4 text-center text-gray-400 text-sm">Aucun lot disponible</td></tr>
+                                )}
+                              </tbody>
+                            </table>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </>
+                )
+              })}
               {filtered.length === 0 && (
                 <tr><td colSpan={5} className="px-6 py-8 text-center text-gray-400">Aucun stock</td></tr>
               )}
