@@ -56,8 +56,44 @@ export default function ProductionPage() {
     setLoading(false)
   }
 
-  async function updateStatut(id: string, statut: string) {
-    await supabase.from('productions').update({ statut }).eq('id', id)
+  async function markTerminee(id: string) {
+    await supabase.from('productions').update({ statut: 'terminee' }).eq('id', id)
+    load()
+  }
+
+  async function annulerProduction(id: string) {
+    if (!confirm('Annuler cette production ? Les quantités seront restituées aux lots et la production sera supprimée.')) return
+
+    // Get lots used by this production
+    const { data: productionLots } = await supabase
+      .from('production_lots')
+      .select('lot_id, quantite_utilisee')
+      .eq('production_id', id)
+
+    // Restore quantities to each lot
+    if (productionLots && productionLots.length > 0) {
+      for (const pl of productionLots) {
+        const { data: lot } = await supabase
+          .from('lots')
+          .select('quantite_restante, quantite_recue')
+          .eq('id', pl.lot_id)
+          .single()
+
+        if (lot) {
+          const newQty = lot.quantite_restante + pl.quantite_utilisee
+          await supabase.from('lots').update({
+            quantite_restante: newQty,
+            statut: newQty >= lot.quantite_recue ? 'disponible' : 'en_cours',
+          }).eq('id', pl.lot_id)
+        }
+      }
+    }
+
+    // Delete production (cascade deletes production_lots and production_lignes)
+    await supabase.from('production_lots').delete().eq('production_id', id)
+    await supabase.from('production_lignes').delete().eq('production_id', id)
+    await supabase.from('productions').delete().eq('id', id)
+
     load()
   }
 
@@ -177,11 +213,11 @@ export default function ProductionPage() {
                       </Link>
                       {prod.statut === 'en_cours' && (
                         <>
-                          <button onClick={() => updateStatut(prod.id, 'terminee')} className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700">
+                          <button onClick={() => markTerminee(prod.id)} className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700">
                             Marquer terminée
                           </button>
-                          <button onClick={() => updateStatut(prod.id, 'annulee')} className="bg-red-500 text-white px-3 py-1 rounded text-sm hover:bg-red-600">
-                            Annuler
+                          <button onClick={() => annulerProduction(prod.id)} className="bg-red-500 text-white px-3 py-1 rounded text-sm hover:bg-red-600">
+                            Annuler et supprimer
                           </button>
                         </>
                       )}
