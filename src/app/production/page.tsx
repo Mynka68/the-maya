@@ -8,12 +8,17 @@ interface Production {
   id: string
   date_production: string
   quantite_produite: number
+  type_conditionnement: string | null
+  grammage: number | null
   numero_lot_produit: string
   statut: string
   notes: string | null
   produits_finis: { nom: string } | null
   production_lots: { quantite_utilisee: number; lots: { numero_lot: string; matieres_premieres: { nom: string } | null } | null }[]
 }
+
+const condLabels: Record<string, string> = { sachet: 'Sachet', boite: 'Boîte', echantillon: 'Échantillon' }
+const condIcons: Record<string, string> = { sachet: '📦', boite: '🎁', echantillon: '🧪' }
 
 const statutLabels: Record<string, string> = { en_cours: 'En cours', terminee: 'Terminée', annulee: 'Annulée' }
 const statutColors: Record<string, string> = { en_cours: 'bg-blue-100 text-blue-800', terminee: 'bg-green-100 text-green-800', annulee: 'bg-red-100 text-red-800' }
@@ -28,7 +33,7 @@ export default function ProductionPage() {
   async function load() {
     const { data } = await supabase
       .from('productions')
-      .select('*, produits_finis(nom), production_lots(quantite_utilisee, lots(numero_lot, matieres_premieres(nom)))')
+      .select('*, produits_finis(nom), production_lots(quantite_utilisee, lots(numero_lot, matieres_premieres(nom, unite)))')
       .order('date_production', { ascending: false })
     setProductions((data as unknown as Production[]) || [])
     setLoading(false)
@@ -67,7 +72,17 @@ export default function ProductionPage() {
                   </span>
                 </div>
                 <div className="flex items-center gap-4">
-                  <span className="text-sm text-gray-500">{prod.quantite_produite} unités</span>
+                  {prod.type_conditionnement && prod.grammage && (
+                    <span className="text-sm bg-gray-100 text-gray-700 px-2 py-1 rounded-full">
+                      {condIcons[prod.type_conditionnement] || ''} {prod.quantite_produite} x {condLabels[prod.type_conditionnement] || prod.type_conditionnement} {prod.grammage}g
+                    </span>
+                  )}
+                  {(!prod.type_conditionnement || !prod.grammage) && (
+                    <span className="text-sm text-gray-500">{prod.quantite_produite} unités</span>
+                  )}
+                  {prod.type_conditionnement && prod.grammage && (
+                    <span className="text-xs text-gray-400">({(prod.quantite_produite * prod.grammage / 1000).toFixed(3)} kg)</span>
+                  )}
                   <span className="text-sm text-gray-400">{prod.date_production}</span>
                   <span className="text-gray-400">{expanded === prod.id ? '▲' : '▼'}</span>
                 </div>

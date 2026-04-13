@@ -22,6 +22,16 @@ interface Lot {
 
 interface LotUsage { lot_id: string; quantite_utilisee: string }
 
+const CONDITIONNEMENTS = [
+  { type: 'sachet', grammage: 100, label: 'Sachet 100g' },
+  { type: 'sachet', grammage: 50, label: 'Sachet 50g' },
+  { type: 'sachet', grammage: 15, label: 'Sachet 15g' },
+  { type: 'boite', grammage: 100, label: 'Boîte 100g' },
+  { type: 'boite', grammage: 50, label: 'Boîte 50g' },
+  { type: 'boite', grammage: 15, label: 'Boîte 15g' },
+  { type: 'echantillon', grammage: 3, label: 'Échantillon 3g' },
+]
+
 function getPeremptionColor(dateStr: string): string {
   const today = new Date()
   const peremption = new Date(dateStr)
@@ -45,8 +55,9 @@ export default function NouvelleProductionPage() {
   const [produits, setProduits] = useState<ProduitFini[]>([])
   const [allLots, setAllLots] = useState<Lot[]>([])
   const [produitId, setProduitId] = useState('')
-  const [dateProduction, setDateProduction] = useState(new Date().toISOString().split('T')[0])
+  const [conditionnementIndex, setConditionnementIndex] = useState<number>(-1)
   const [quantiteProduite, setQuantiteProduite] = useState('')
+  const [dateProduction, setDateProduction] = useState(new Date().toISOString().split('T')[0])
   const [numeroLotProduit, setNumeroLotProduit] = useState('')
   const [notes, setNotes] = useState('')
   const [lotsUtilises, setLotsUtilises] = useState<LotUsage[]>([{ lot_id: '', quantite_utilisee: '' }])
@@ -56,6 +67,19 @@ export default function NouvelleProductionPage() {
   const selectedProduit = produits.find(p => p.id === produitId)
   const matiereAssociee = selectedProduit?.matieres_premieres
   const matiereId = selectedProduit?.matiere_premiere_id
+  const selectedConditionnement = conditionnementIndex >= 0 ? CONDITIONNEMENTS[conditionnementIndex] : null
+
+  // Calcul du poids total nécessaire
+  const qte = parseFloat(quantiteProduite) || 0
+  const grammage = selectedConditionnement?.grammage || 0
+  const poidsTotal = qte * grammage // en grammes
+  const poidsTotalKg = poidsTotal / 1000 // en kg
+  const unite = matiereAssociee?.unite || 'kg'
+  const poidsTotalDisplay = unite === 'kg' ? poidsTotalKg : poidsTotal
+
+  // Quantité totale consommée dans les lots
+  const totalConsomme = lotsUtilises.reduce((sum, lu) => sum + (parseFloat(lu.quantite_utilisee) || 0), 0)
+  const resteAAffecter = poidsTotalDisplay - totalConsomme
 
   // Lots filtrés pour la matière première du produit sélectionné
   const lotsDisponibles = matiereId
@@ -75,16 +99,12 @@ export default function NouvelleProductionPage() {
     })
   }, [])
 
-  // Quand on sélectionne un produit, auto-sélectionner le lot FEFO
   function handleProduitChange(newProduitId: string) {
     setProduitId(newProduitId)
-
     const produit = produits.find(p => p.id === newProduitId)
     if (produit?.matiere_premiere_id) {
-      // Trouver le lot avec la date de péremption la plus proche (FEFO)
       const lotsMatiere = allLots.filter(l => l.matiere_premiere_id === produit.matiere_premiere_id)
       if (lotsMatiere.length > 0) {
-        // Le premier lot est déjà le plus proche (trié par date_peremption ASC)
         setLotsUtilises([{ lot_id: lotsMatiere[0].id, quantite_utilisee: '' }])
       } else {
         setLotsUtilises([{ lot_id: '', quantite_utilisee: '' }])
@@ -94,6 +114,30 @@ export default function NouvelleProductionPage() {
     }
   }
 
+  // Auto-remplir la quantité consommée quand on change la quantité ou le conditionnement
+  function autoFillLotQuantity() {
+    if (poidsTotalDisplay <= 0 || lotsUtilises.length === 0) return
+
+    const updated: LotUsage[] = []
+    let remaining = poidsTotalDisplay
+
+    for (let i = 0; i < lotsUtilises.length; i++) {
+      const lu = lotsUtilises[i]
+      const lotInfo = allLots.find(l => l.id === lu.lot_id)
+
+      if (!lotInfo || remaining <= 0) {
+        updated.push({ ...lu, quantite_utilisee: remaining <= 0 ? '0' : '' })
+        continue
+      }
+
+      const toUse = Math.min(remaining, lotInfo.quantite_restante)
+      updated.push({ ...lu, quantite_utilisee: toUse.toFixed(2) })
+      remaining -= toUse
+    }
+
+    setLotsUtilises(updated)
+  }
+
   function updateLotUsage(index: number, field: keyof LotUsage, value: string) {
     const updated = [...lotsUtilises]
     updated[index] = { ...updated[index], [field]: value }
@@ -101,7 +145,6 @@ export default function NouvelleProductionPage() {
   }
 
   function addLotUsage() {
-    // Auto-sélectionner le prochain lot FEFO non encore utilisé
     const usedLotIds = lotsUtilises.map(l => l.lot_id)
     const nextLot = lotsDisponibles.find(l => !usedLotIds.includes(l.id))
     setLotsUtilises([...lotsUtilises, { lot_id: nextLot?.id || '', quantite_utilisee: '' }])
@@ -117,17 +160,16 @@ export default function NouvelleProductionPage() {
   }
 
   async function save() {
-    if (!produitId || !quantiteProduite || !numeroLotProduit) {
-      alert('Veuillez remplir le produit, la quantité et le n° de lot produit')
+    if (!produitId || !quantiteProduite || !numeroLotProduit || conditionnementIndex < 0) {
+      alert('Veuillez remplir le produit, le conditionnement, la quantité et le n° de lot produit')
       return
     }
-    const validLots = lotsUtilises.filter(l => l.lot_id && l.quantite_utilisee)
+    const validLots = lotsUtilises.filter(l => l.lot_id && l.quantite_utilisee && parseFloat(l.quantite_utilisee) > 0)
     if (validLots.length === 0) {
       alert('Veuillez sélectionner au moins un lot à consommer')
       return
     }
 
-    // Vérifier les quantités
     for (const lu of validLots) {
       const lot = getLotInfo(lu.lot_id)
       if (lot && parseFloat(lu.quantite_utilisee) > lot.quantite_restante) {
@@ -138,10 +180,13 @@ export default function NouvelleProductionPage() {
 
     setSaving(true)
 
+    const cond = CONDITIONNEMENTS[conditionnementIndex]
     const { data: production, error } = await supabase.from('productions').insert({
       produit_fini_id: produitId,
       date_production: dateProduction,
       quantite_produite: parseFloat(quantiteProduite),
+      type_conditionnement: cond.type,
+      grammage: cond.grammage,
       numero_lot_produit: numeroLotProduit,
       notes: notes || null,
     }).select().single()
@@ -152,7 +197,6 @@ export default function NouvelleProductionPage() {
       return
     }
 
-    // Insérer les lots utilisés
     const productionLots = validLots.map(l => ({
       production_id: production.id,
       lot_id: l.lot_id,
@@ -160,7 +204,6 @@ export default function NouvelleProductionPage() {
     }))
     await supabase.from('production_lots').insert(productionLots)
 
-    // Mettre à jour les quantités restantes des lots
     for (const lu of validLots) {
       const lot = getLotInfo(lu.lot_id)
       if (lot) {
@@ -179,9 +222,10 @@ export default function NouvelleProductionPage() {
     <div>
       <h1 className="text-2xl font-bold text-primary-dark mb-6">Nouvelle production</h1>
 
+      {/* Produit + Conditionnement */}
       <div className="bg-card rounded-lg shadow p-6 mb-6">
         <h2 className="font-semibold mb-4">Produit fini</h2>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Produit *</label>
             <select value={produitId} onChange={(e) => handleProduitChange(e.target.value)} className="border rounded-lg px-3 py-2 w-full">
@@ -193,17 +237,80 @@ export default function NouvelleProductionPage() {
             <label className="block text-sm font-medium text-gray-700 mb-1">N° lot produit *</label>
             <input value={numeroLotProduit} onChange={(e) => setNumeroLotProduit(e.target.value)} className="border rounded-lg px-3 py-2 w-full" />
           </div>
+        </div>
+
+        {/* Conditionnement */}
+        <div className="mt-4">
+          <label className="block text-sm font-medium text-gray-700 mb-2">Conditionnement *</label>
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-2">
+            {CONDITIONNEMENTS.map((c, i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={() => setConditionnementIndex(i)}
+                className={`border rounded-lg px-3 py-3 text-sm text-center transition ${
+                  conditionnementIndex === i
+                    ? 'border-primary bg-primary/10 text-primary font-medium ring-2 ring-primary/30'
+                    : 'border-gray-200 hover:border-gray-400 text-gray-700'
+                }`}
+              >
+                <div className="font-medium">{c.type === 'sachet' ? '📦' : c.type === 'boite' ? '🎁' : '🧪'}</div>
+                <div className="mt-1">{c.label}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Quantité + Date */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Quantité produite *</label>
-            <input type="number" step="0.01" value={quantiteProduite} onChange={(e) => setQuantiteProduite(e.target.value)} className="border rounded-lg px-3 py-2 w-full" />
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Nombre d&apos;unités produites *
+            </label>
+            <input
+              type="number"
+              step="1"
+              min="1"
+              value={quantiteProduite}
+              onChange={(e) => setQuantiteProduite(e.target.value)}
+              placeholder={selectedConditionnement ? `Nb de ${selectedConditionnement.label}` : 'Quantité'}
+              className="border rounded-lg px-3 py-2 w-full"
+            />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Date de production</label>
             <input type="date" value={dateProduction} onChange={(e) => setDateProduction(e.target.value)} className="border rounded-lg px-3 py-2 w-full" />
           </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+            <input value={notes} onChange={(e) => setNotes(e.target.value)} className="border rounded-lg px-3 py-2 w-full" />
+          </div>
         </div>
 
-        {/* Bandeau matière première associée */}
+        {/* Résumé calcul */}
+        {selectedConditionnement && qte > 0 && (
+          <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-blue-800">
+                  {qte} x {selectedConditionnement.label} = <strong>{poidsTotal}g</strong> ({poidsTotalKg.toFixed(3)} kg)
+                </p>
+                <p className="text-xs text-blue-600 mt-1">
+                  Matière première nécessaire : <strong>{poidsTotalDisplay.toFixed(3)} {unite}</strong>
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={autoFillLotQuantity}
+                className="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-sm hover:bg-blue-700 transition"
+              >
+                Auto-remplir les lots
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Bandeau matière première */}
         {selectedProduit && matiereAssociee && (
           <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg flex items-center gap-3">
             <span className="text-green-600 text-lg">🍃</span>
@@ -212,7 +319,7 @@ export default function NouvelleProductionPage() {
                 Matière première : <strong>{matiereAssociee.nom}</strong> ({matiereAssociee.unite})
               </p>
               <p className="text-xs text-green-600">
-                {lotsDisponibles.length} lot(s) disponible(s) — le lot avec la péremption la plus proche est pré-sélectionné
+                {lotsDisponibles.length} lot(s) disponible(s) — lot FEFO pré-sélectionné
               </p>
             </div>
           </div>
@@ -226,19 +333,27 @@ export default function NouvelleProductionPage() {
             </p>
           </div>
         )}
-
-        <div className="mt-4">
-          <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
-          <input value={notes} onChange={(e) => setNotes(e.target.value)} className="border rounded-lg px-3 py-2 w-full" />
-        </div>
       </div>
 
+      {/* Lots consommés */}
       <div className="bg-card rounded-lg shadow p-6 mb-6">
         <div className="flex justify-between items-center mb-4">
-          <h2 className="font-semibold">
-            Lots consommés (traçabilité)
-            {matiereAssociee && <span className="text-sm font-normal text-gray-500 ml-2">— {matiereAssociee.nom}</span>}
-          </h2>
+          <div>
+            <h2 className="font-semibold">
+              Lots consommés (traçabilité)
+              {matiereAssociee && <span className="text-sm font-normal text-gray-500 ml-2">— {matiereAssociee.nom}</span>}
+            </h2>
+            {poidsTotalDisplay > 0 && (
+              <p className={`text-xs mt-1 ${Math.abs(resteAAffecter) < 0.001 ? 'text-green-600' : resteAAffecter > 0 ? 'text-orange-600' : 'text-red-600'}`}>
+                {Math.abs(resteAAffecter) < 0.001
+                  ? '✅ Quantité correcte affectée'
+                  : resteAAffecter > 0
+                    ? `⚠️ Reste ${resteAAffecter.toFixed(3)} ${unite} à affecter`
+                    : `❌ Dépassement de ${Math.abs(resteAAffecter).toFixed(3)} ${unite}`
+                }
+              </p>
+            )}
+          </div>
           <button onClick={addLotUsage} className="text-primary hover:underline text-sm">+ Ajouter un lot</button>
         </div>
 
@@ -269,11 +384,11 @@ export default function NouvelleProductionPage() {
                   </div>
                   <div className="w-48">
                     <label className="block text-xs text-gray-500 mb-1">
-                      Quantité * {lotInfo && <span className="text-gray-400">(max: {lotInfo.quantite_restante})</span>}
+                      Quantité ({unite}) * {lotInfo && <span className="text-gray-400">(max: {lotInfo.quantite_restante})</span>}
                     </label>
                     <input
                       type="number"
-                      step="0.01"
+                      step="0.001"
                       value={lu.quantite_utilisee}
                       onChange={(e) => updateLotUsage(i, 'quantite_utilisee', e.target.value)}
                       className="border rounded-lg px-3 py-2 w-full text-sm"
