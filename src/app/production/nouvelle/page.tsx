@@ -63,7 +63,6 @@ export default function NouvelleProductionPage() {
   const [allLots, setAllLots] = useState<Lot[]>([])
   const [produitId, setProduitId] = useState('')
   const [dateProduction, setDateProduction] = useState(new Date().toISOString().split('T')[0])
-  const [numeroLotProduit, setNumeroLotProduit] = useState('')
   const [notes, setNotes] = useState('')
   const [lignes, setLignes] = useState<LigneConditionnement[]>([])
   const [lotsUtilises, setLotsUtilises] = useState<LotUsage[]>([])
@@ -177,8 +176,8 @@ export default function NouvelleProductionPage() {
   }
 
   async function save() {
-    if (!produitId || !numeroLotProduit) {
-      alert('Veuillez remplir le produit et le n° de lot produit')
+    if (!produitId) {
+      alert('Veuillez sélectionner un produit')
       return
     }
     const validLignes = lignes.filter(l => parseInt(l.quantite) > 0)
@@ -209,7 +208,7 @@ export default function NouvelleProductionPage() {
       quantite_produite: totalUnites,
       type_conditionnement: validLignes[0].type,
       grammage: validLignes[0].grammage,
-      numero_lot_produit: numeroLotProduit,
+      numero_lot_produit: `PROD-${Date.now()}`,
       notes: notes || null,
     }).select().single()
 
@@ -248,7 +247,7 @@ export default function NouvelleProductionPage() {
       }
     }
 
-    router.push('/production')
+    router.push(`/production/fiche?id=${production.id}`)
   }
 
   const ligneTypes = lignes.map(l => `${l.type}-${l.grammage}`)
@@ -260,17 +259,13 @@ export default function NouvelleProductionPage() {
       {/* Produit */}
       <div className="bg-card rounded-lg shadow p-6 mb-6">
         <h2 className="font-semibold mb-4">Produit fini</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Produit *</label>
             <select value={produitId} onChange={(e) => handleProduitChange(e.target.value)} className="border rounded-lg px-3 py-2 w-full">
               <option value="">-- Sélectionner --</option>
               {produits.map(p => <option key={p.id} value={p.id}>{p.nom}</option>)}
             </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">N° lot produit *</label>
-            <input value={numeroLotProduit} onChange={(e) => setNumeroLotProduit(e.target.value)} className="border rounded-lg px-3 py-2 w-full" />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Date de production</label>

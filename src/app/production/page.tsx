@@ -168,16 +168,24 @@ export default function ProductionPage() {
 
                     {prod.notes && <p className="text-sm text-gray-500 mt-3">Notes: {prod.notes}</p>}
 
-                    {prod.statut === 'en_cours' && (
-                      <div className="flex gap-2 mt-4">
-                        <button onClick={() => updateStatut(prod.id, 'terminee')} className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700">
-                          Marquer terminée
-                        </button>
-                        <button onClick={() => updateStatut(prod.id, 'annulee')} className="bg-red-500 text-white px-3 py-1 rounded text-sm hover:bg-red-600">
-                          Annuler
-                        </button>
-                      </div>
-                    )}
+                    <div className="flex gap-2 mt-4">
+                      <Link
+                        href={`/production/fiche?id=${prod.id}`}
+                        className="bg-gray-700 text-white px-3 py-1 rounded text-sm hover:bg-gray-800"
+                      >
+                        🖨️ Imprimer la fiche
+                      </Link>
+                      {prod.statut === 'en_cours' && (
+                        <>
+                          <button onClick={() => updateStatut(prod.id, 'terminee')} className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700">
+                            Marquer terminée
+                          </button>
+                          <button onClick={() => updateStatut(prod.id, 'annulee')} className="bg-red-500 text-white px-3 py-1 rounded text-sm hover:bg-red-600">
+                            Annuler
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
