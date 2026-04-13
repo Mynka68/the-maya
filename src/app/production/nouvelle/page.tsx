@@ -20,16 +20,23 @@ interface Lot {
   matieres_premieres: { nom: string; unite: string } | null
 }
 
+interface LigneConditionnement {
+  type: string
+  grammage: number
+  label: string
+  quantite: string
+}
+
 interface LotUsage { lot_id: string; quantite_utilisee: string }
 
 const CONDITIONNEMENTS = [
-  { type: 'sachet', grammage: 100, label: 'Sachet 100g' },
-  { type: 'sachet', grammage: 50, label: 'Sachet 50g' },
-  { type: 'sachet', grammage: 15, label: 'Sachet 15g' },
-  { type: 'boite', grammage: 100, label: 'Boîte 100g' },
-  { type: 'boite', grammage: 50, label: 'Boîte 50g' },
-  { type: 'boite', grammage: 15, label: 'Boîte 15g' },
-  { type: 'echantillon', grammage: 3, label: 'Échantillon 3g' },
+  { type: 'sachet', grammage: 100, label: 'Sachet 100g', icon: '📦' },
+  { type: 'sachet', grammage: 50, label: 'Sachet 50g', icon: '📦' },
+  { type: 'sachet', grammage: 15, label: 'Sachet 15g', icon: '📦' },
+  { type: 'boite', grammage: 100, label: 'Boîte 100g', icon: '🎁' },
+  { type: 'boite', grammage: 50, label: 'Boîte 50g', icon: '🎁' },
+  { type: 'boite', grammage: 15, label: 'Boîte 15g', icon: '🎁' },
+  { type: 'echantillon', grammage: 3, label: 'Échantillon 3g', icon: '🧪' },
 ]
 
 function getPeremptionColor(dateStr: string): string {
@@ -55,36 +62,30 @@ export default function NouvelleProductionPage() {
   const [produits, setProduits] = useState<ProduitFini[]>([])
   const [allLots, setAllLots] = useState<Lot[]>([])
   const [produitId, setProduitId] = useState('')
-  const [conditionnementIndex, setConditionnementIndex] = useState<number>(-1)
-  const [quantiteProduite, setQuantiteProduite] = useState('')
   const [dateProduction, setDateProduction] = useState(new Date().toISOString().split('T')[0])
   const [numeroLotProduit, setNumeroLotProduit] = useState('')
   const [notes, setNotes] = useState('')
-  const [lotsUtilises, setLotsUtilises] = useState<LotUsage[]>([{ lot_id: '', quantite_utilisee: '' }])
+  const [lignes, setLignes] = useState<LigneConditionnement[]>([])
+  const [lotsUtilises, setLotsUtilises] = useState<LotUsage[]>([])
   const [saving, setSaving] = useState(false)
 
-  // Derived state
   const selectedProduit = produits.find(p => p.id === produitId)
   const matiereAssociee = selectedProduit?.matieres_premieres
   const matiereId = selectedProduit?.matiere_premiere_id
-  const selectedConditionnement = conditionnementIndex >= 0 ? CONDITIONNEMENTS[conditionnementIndex] : null
-
-  // Calcul du poids total nécessaire
-  const qte = parseFloat(quantiteProduite) || 0
-  const grammage = selectedConditionnement?.grammage || 0
-  const poidsTotal = qte * grammage // en grammes
-  const poidsTotalKg = poidsTotal / 1000 // en kg
   const unite = matiereAssociee?.unite || 'kg'
-  const poidsTotalDisplay = unite === 'kg' ? poidsTotalKg : poidsTotal
 
-  // Quantité totale consommée dans les lots
-  const totalConsomme = lotsUtilises.reduce((sum, lu) => sum + (parseFloat(lu.quantite_utilisee) || 0), 0)
-  const resteAAffecter = poidsTotalDisplay - totalConsomme
-
-  // Lots filtrés pour la matière première du produit sélectionné
   const lotsDisponibles = matiereId
     ? allLots.filter(l => l.matiere_premiere_id === matiereId)
     : allLots
+
+  // Calcul du poids total de toutes les lignes
+  const poidsTotalGrammes = lignes.reduce((sum, l) => sum + (parseInt(l.quantite) || 0) * l.grammage, 0)
+  const poidsTotalKg = poidsTotalGrammes / 1000
+  const poidsTotalDisplay = unite === 'kg' ? poidsTotalKg : poidsTotalGrammes
+  const totalUnites = lignes.reduce((sum, l) => sum + (parseInt(l.quantite) || 0), 0)
+
+  const totalConsomme = lotsUtilises.reduce((sum, lu) => sum + (parseFloat(lu.quantite_utilisee) || 0), 0)
+  const resteAAffecter = poidsTotalDisplay - totalConsomme
 
   useEffect(() => {
     Promise.all([
@@ -101,6 +102,7 @@ export default function NouvelleProductionPage() {
 
   function handleProduitChange(newProduitId: string) {
     setProduitId(newProduitId)
+    setLignes([])
     const produit = produits.find(p => p.id === newProduitId)
     if (produit?.matiere_premiere_id) {
       const lotsMatiere = allLots.filter(l => l.matiere_premiere_id === produit.matiere_premiere_id)
@@ -114,28 +116,43 @@ export default function NouvelleProductionPage() {
     }
   }
 
-  // Auto-remplir la quantité consommée quand on change la quantité ou le conditionnement
-  function autoFillLotQuantity() {
-    if (poidsTotalDisplay <= 0 || lotsUtilises.length === 0) return
+  function addLigne(condIndex: number) {
+    const c = CONDITIONNEMENTS[condIndex]
+    // Check if already exists
+    const existing = lignes.findIndex(l => l.type === c.type && l.grammage === c.grammage)
+    if (existing >= 0) return // already added
+    setLignes([...lignes, { type: c.type, grammage: c.grammage, label: c.label, quantite: '' }])
+  }
 
-    const updated: LotUsage[] = []
+  function updateLigneQuantite(index: number, quantite: string) {
+    const updated = [...lignes]
+    updated[index] = { ...updated[index], quantite }
+    setLignes(updated)
+  }
+
+  function removeLigne(index: number) {
+    setLignes(lignes.filter((_, i) => i !== index))
+  }
+
+  function autoFillLots() {
+    if (poidsTotalDisplay <= 0) return
+
+    // Build lot list from FEFO order, adding lots as needed
+    const newLots: LotUsage[] = []
     let remaining = poidsTotalDisplay
 
-    for (let i = 0; i < lotsUtilises.length; i++) {
-      const lu = lotsUtilises[i]
-      const lotInfo = allLots.find(l => l.id === lu.lot_id)
-
-      if (!lotInfo || remaining <= 0) {
-        updated.push({ ...lu, quantite_utilisee: remaining <= 0 ? '0' : '' })
-        continue
-      }
-
-      const toUse = Math.min(remaining, lotInfo.quantite_restante)
-      updated.push({ ...lu, quantite_utilisee: toUse.toFixed(2) })
+    for (const lot of lotsDisponibles) {
+      if (remaining <= 0) break
+      const toUse = Math.min(remaining, lot.quantite_restante)
+      newLots.push({ lot_id: lot.id, quantite_utilisee: toUse.toFixed(3) })
       remaining -= toUse
     }
 
-    setLotsUtilises(updated)
+    if (newLots.length === 0) {
+      newLots.push({ lot_id: '', quantite_utilisee: '' })
+    }
+
+    setLotsUtilises(newLots)
   }
 
   function updateLotUsage(index: number, field: keyof LotUsage, value: string) {
@@ -160,13 +177,18 @@ export default function NouvelleProductionPage() {
   }
 
   async function save() {
-    if (!produitId || !quantiteProduite || !numeroLotProduit || conditionnementIndex < 0) {
-      alert('Veuillez remplir le produit, le conditionnement, la quantité et le n° de lot produit')
+    if (!produitId || !numeroLotProduit) {
+      alert('Veuillez remplir le produit et le n° de lot produit')
+      return
+    }
+    const validLignes = lignes.filter(l => parseInt(l.quantite) > 0)
+    if (validLignes.length === 0) {
+      alert('Veuillez ajouter au moins un conditionnement avec une quantité')
       return
     }
     const validLots = lotsUtilises.filter(l => l.lot_id && l.quantite_utilisee && parseFloat(l.quantite_utilisee) > 0)
     if (validLots.length === 0) {
-      alert('Veuillez sélectionner au moins un lot à consommer')
+      alert('Veuillez affecter de la matière première depuis au moins un lot')
       return
     }
 
@@ -180,13 +202,13 @@ export default function NouvelleProductionPage() {
 
     setSaving(true)
 
-    const cond = CONDITIONNEMENTS[conditionnementIndex]
+    // Create production with total quantity and first conditionnement for backward compat
     const { data: production, error } = await supabase.from('productions').insert({
       produit_fini_id: produitId,
       date_production: dateProduction,
-      quantite_produite: parseFloat(quantiteProduite),
-      type_conditionnement: cond.type,
-      grammage: cond.grammage,
+      quantite_produite: totalUnites,
+      type_conditionnement: validLignes[0].type,
+      grammage: validLignes[0].grammage,
       numero_lot_produit: numeroLotProduit,
       notes: notes || null,
     }).select().single()
@@ -197,6 +219,16 @@ export default function NouvelleProductionPage() {
       return
     }
 
+    // Insert production lines
+    const lignesInsert = validLignes.map(l => ({
+      production_id: production.id,
+      type_conditionnement: l.type,
+      grammage: l.grammage,
+      quantite: parseInt(l.quantite),
+    }))
+    await supabase.from('production_lignes').insert(lignesInsert)
+
+    // Insert lot usage
     const productionLots = validLots.map(l => ({
       production_id: production.id,
       lot_id: l.lot_id,
@@ -204,6 +236,7 @@ export default function NouvelleProductionPage() {
     }))
     await supabase.from('production_lots').insert(productionLots)
 
+    // Update lot quantities
     for (const lu of validLots) {
       const lot = getLotInfo(lu.lot_id)
       if (lot) {
@@ -218,14 +251,16 @@ export default function NouvelleProductionPage() {
     router.push('/production')
   }
 
+  const ligneTypes = lignes.map(l => `${l.type}-${l.grammage}`)
+
   return (
     <div>
       <h1 className="text-2xl font-bold text-primary-dark mb-6">Nouvelle production</h1>
 
-      {/* Produit + Conditionnement */}
+      {/* Produit */}
       <div className="bg-card rounded-lg shadow p-6 mb-6">
         <h2 className="font-semibold mb-4">Produit fini</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Produit *</label>
             <select value={produitId} onChange={(e) => handleProduitChange(e.target.value)} className="border rounded-lg px-3 py-2 w-full">
@@ -237,80 +272,12 @@ export default function NouvelleProductionPage() {
             <label className="block text-sm font-medium text-gray-700 mb-1">N° lot produit *</label>
             <input value={numeroLotProduit} onChange={(e) => setNumeroLotProduit(e.target.value)} className="border rounded-lg px-3 py-2 w-full" />
           </div>
-        </div>
-
-        {/* Conditionnement */}
-        <div className="mt-4">
-          <label className="block text-sm font-medium text-gray-700 mb-2">Conditionnement *</label>
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-2">
-            {CONDITIONNEMENTS.map((c, i) => (
-              <button
-                key={i}
-                type="button"
-                onClick={() => setConditionnementIndex(i)}
-                className={`border rounded-lg px-3 py-3 text-sm text-center transition ${
-                  conditionnementIndex === i
-                    ? 'border-primary bg-primary/10 text-primary font-medium ring-2 ring-primary/30'
-                    : 'border-gray-200 hover:border-gray-400 text-gray-700'
-                }`}
-              >
-                <div className="font-medium">{c.type === 'sachet' ? '📦' : c.type === 'boite' ? '🎁' : '🧪'}</div>
-                <div className="mt-1">{c.label}</div>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Quantité + Date */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Nombre d&apos;unités produites *
-            </label>
-            <input
-              type="number"
-              step="1"
-              min="1"
-              value={quantiteProduite}
-              onChange={(e) => setQuantiteProduite(e.target.value)}
-              placeholder={selectedConditionnement ? `Nb de ${selectedConditionnement.label}` : 'Quantité'}
-              className="border rounded-lg px-3 py-2 w-full"
-            />
-          </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Date de production</label>
             <input type="date" value={dateProduction} onChange={(e) => setDateProduction(e.target.value)} className="border rounded-lg px-3 py-2 w-full" />
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
-            <input value={notes} onChange={(e) => setNotes(e.target.value)} className="border rounded-lg px-3 py-2 w-full" />
-          </div>
         </div>
 
-        {/* Résumé calcul */}
-        {selectedConditionnement && qte > 0 && (
-          <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-blue-800">
-                  {qte} x {selectedConditionnement.label} = <strong>{poidsTotal}g</strong> ({poidsTotalKg.toFixed(3)} kg)
-                </p>
-                <p className="text-xs text-blue-600 mt-1">
-                  Matière première nécessaire : <strong>{poidsTotalDisplay.toFixed(3)} {unite}</strong>
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={autoFillLotQuantity}
-                className="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-sm hover:bg-blue-700 transition"
-              >
-                Auto-remplir les lots
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Bandeau matière première */}
         {selectedProduit && matiereAssociee && (
           <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg flex items-center gap-3">
             <span className="text-green-600 text-lg">🍃</span>
@@ -319,7 +286,7 @@ export default function NouvelleProductionPage() {
                 Matière première : <strong>{matiereAssociee.nom}</strong> ({matiereAssociee.unite})
               </p>
               <p className="text-xs text-green-600">
-                {lotsDisponibles.length} lot(s) disponible(s) — lot FEFO pré-sélectionné
+                {lotsDisponibles.length} lot(s) disponible(s)
               </p>
             </div>
           </div>
@@ -329,8 +296,109 @@ export default function NouvelleProductionPage() {
           <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg flex items-center gap-3">
             <span className="text-yellow-600 text-lg">⚠️</span>
             <p className="text-sm text-yellow-800">
-              Ce produit n&apos;a pas de matière première associée. Allez dans <strong>Produits finis</strong> pour en associer une.
+              Ce produit n&apos;a pas de matière première associée.
             </p>
+          </div>
+        )}
+
+        <div className="mt-4">
+          <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+          <input value={notes} onChange={(e) => setNotes(e.target.value)} className="border rounded-lg px-3 py-2 w-full" />
+        </div>
+      </div>
+
+      {/* Conditionnements */}
+      <div className="bg-card rounded-lg shadow p-6 mb-6">
+        <h2 className="font-semibold mb-4">Conditionnements</h2>
+
+        {/* Boutons pour ajouter */}
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-2 mb-4">
+          {CONDITIONNEMENTS.map((c, i) => {
+            const key = `${c.type}-${c.grammage}`
+            const isAdded = ligneTypes.includes(key)
+            return (
+              <button
+                key={i}
+                type="button"
+                onClick={() => !isAdded && addLigne(i)}
+                disabled={isAdded}
+                className={`border rounded-lg px-3 py-3 text-sm text-center transition ${
+                  isAdded
+                    ? 'border-primary bg-primary/10 text-primary font-medium opacity-60 cursor-not-allowed'
+                    : 'border-gray-200 hover:border-primary hover:bg-primary/5 text-gray-700'
+                }`}
+              >
+                <div className="font-medium">{c.icon}</div>
+                <div className="mt-1">{c.label}</div>
+                {isAdded && <div className="text-xs mt-1">✓ ajouté</div>}
+              </button>
+            )
+          })}
+        </div>
+
+        {/* Lignes ajoutées */}
+        {lignes.length > 0 ? (
+          <div className="space-y-3">
+            {lignes.map((ligne, i) => {
+              const qte = parseInt(ligne.quantite) || 0
+              const poids = qte * ligne.grammage
+              const condInfo = CONDITIONNEMENTS.find(c => c.type === ligne.type && c.grammage === ligne.grammage)
+              return (
+                <div key={i} className="flex items-center gap-3 border rounded-lg p-3 bg-gray-50">
+                  <span className="text-lg">{condInfo?.icon || '📦'}</span>
+                  <span className="font-medium text-sm w-32">{ligne.label}</span>
+                  <div className="flex-1">
+                    <input
+                      type="number"
+                      step="1"
+                      min="1"
+                      placeholder="Nombre d'unités"
+                      value={ligne.quantite}
+                      onChange={(e) => updateLigneQuantite(i, e.target.value)}
+                      className="border rounded-lg px-3 py-2 w-full text-sm"
+                    />
+                  </div>
+                  {qte > 0 && (
+                    <span className="text-xs text-gray-500 w-28 text-right">
+                      = {poids}g ({(poids / 1000).toFixed(3)} kg)
+                    </span>
+                  )}
+                  <button onClick={() => removeLigne(i)} className="text-red-500 hover:underline text-sm">✕</button>
+                </div>
+              )
+            })}
+          </div>
+        ) : (
+          <p className="text-gray-400 text-sm text-center py-4">Cliquez sur un conditionnement ci-dessus pour l&apos;ajouter</p>
+        )}
+
+        {/* Résumé total */}
+        {lignes.length > 0 && poidsTotalGrammes > 0 && (
+          <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-blue-800">
+                  Total : <strong>{totalUnites} unités</strong> — <strong>{poidsTotalGrammes}g</strong> ({poidsTotalKg.toFixed(3)} kg)
+                </p>
+                <div className="flex flex-wrap gap-3 mt-1">
+                  {lignes.filter(l => parseInt(l.quantite) > 0).map((l, i) => (
+                    <span key={i} className="text-xs text-blue-600">
+                      {parseInt(l.quantite)} x {l.label}
+                    </span>
+                  ))}
+                </div>
+                <p className="text-xs text-blue-600 mt-1">
+                  Matière première nécessaire : <strong>{poidsTotalDisplay.toFixed(3)} {unite}</strong>
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={autoFillLots}
+                className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 transition whitespace-nowrap"
+              >
+                Auto-remplir les lots
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -360,7 +428,7 @@ export default function NouvelleProductionPage() {
         <div className="space-y-3">
           {lotsUtilises.map((lu, i) => {
             const lotInfo = getLotInfo(lu.lot_id)
-            const isFefo = i === 0 && lotInfo && lotsDisponibles.length > 0 && lotInfo.id === lotsDisponibles[0]?.id
+            const isFefo = lotInfo && lotsDisponibles.length > 0 && lotInfo.id === lotsDisponibles[0]?.id
             return (
               <div key={i} className={`border rounded-lg p-3 ${isFefo ? 'bg-green-50 border-green-200' : 'bg-gray-50'}`}>
                 {isFefo && (
@@ -377,7 +445,7 @@ export default function NouvelleProductionPage() {
                       <option value="">-- Sélectionner un lot --</option>
                       {lotsDisponibles.map(l => (
                         <option key={l.id} value={l.id}>
-                          {l.numero_lot} — {l.matieres_premieres?.nom} — reste: {l.quantite_restante} {l.matieres_premieres?.unite} — exp: {l.date_peremption}
+                          {l.numero_lot} — reste: {l.quantite_restante} {l.matieres_premieres?.unite} — exp: {l.date_peremption}
                         </option>
                       ))}
                     </select>
