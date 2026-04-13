@@ -115,6 +115,12 @@ export default function ReceptionsPage() {
                     </td>
                     <td className="px-6 py-4 text-gray-500 text-sm">{r.notes || '-'}</td>
                     <td className="px-6 py-4 text-right space-x-2">
+                      <Link
+                        href={`/receptions/nouveau?id=${r.id}`}
+                        className="text-primary hover:underline text-sm"
+                      >
+                        Modifier
+                      </Link>
                       <button
                         onClick={() => setExpandedId(expandedId === r.id ? null : r.id)}
                         className="text-primary hover:underline text-sm"

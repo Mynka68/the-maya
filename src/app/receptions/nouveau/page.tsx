@@ -2,14 +2,17 @@
 
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
+import DocumentManager from '@/components/DocumentManager'
 
 interface Fournisseur { id: string; nom: string }
 interface Matiere { id: string; nom: string; categorie: string; unite: string }
 interface LotForm {
+  id?: string
   matiere_premiere_id: string
   numero_lot: string
   quantite_recue: string
+  quantite_restante?: number
   date_fabrication: string
   date_peremption: string
   notes: string
@@ -17,8 +20,12 @@ interface LotForm {
 
 const emptyLot: LotForm = { matiere_premiere_id: '', numero_lot: '', quantite_recue: '', date_fabrication: '', date_peremption: '', notes: '' }
 
-export default function NouvelleReceptionPage() {
+export default function ReceptionFormPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const editId = searchParams.get('id')
+  const isEdit = !!editId
+
   const [fournisseurs, setFournisseurs] = useState<Fournisseur[]>([])
   const [matieres, setMatieres] = useState<Matiere[]>([])
   const [fournisseurId, setFournisseurId] = useState('')
@@ -27,6 +34,8 @@ export default function NouvelleReceptionPage() {
   const [notes, setNotes] = useState('')
   const [lots, setLots] = useState<LotForm[]>([{ ...emptyLot }])
   const [saving, setSaving] = useState(false)
+  const [loadingEdit, setLoadingEdit] = useState(isEdit)
+  const [lotsToDelete, setLotsToDelete] = useState<string[]>([])
 
   useEffect(() => {
     Promise.all([
@@ -36,7 +45,51 @@ export default function NouvelleReceptionPage() {
       setFournisseurs(f.data || [])
       setMatieres(m.data || [])
     })
-  }, [])
+
+    if (editId) {
+      loadReception(editId)
+    }
+  }, [editId])
+
+  async function loadReception(id: string) {
+    const { data: reception } = await supabase
+      .from('receptions')
+      .select('*')
+      .eq('id', id)
+      .single()
+
+    if (!reception) {
+      alert('Réception introuvable')
+      router.push('/receptions')
+      return
+    }
+
+    setFournisseurId(reception.fournisseur_id || '')
+    setDateReception(reception.date_reception)
+    setNumeroBl(reception.numero_bl || '')
+    setNotes(reception.notes || '')
+
+    const { data: lotsData } = await supabase
+      .from('lots')
+      .select('*')
+      .eq('reception_id', id)
+      .order('created_at')
+
+    if (lotsData && lotsData.length > 0) {
+      setLots(lotsData.map(l => ({
+        id: l.id,
+        matiere_premiere_id: l.matiere_premiere_id,
+        numero_lot: l.numero_lot,
+        quantite_recue: String(l.quantite_recue),
+        quantite_restante: l.quantite_restante,
+        date_fabrication: l.date_fabrication || '',
+        date_peremption: l.date_peremption,
+        notes: l.notes || '',
+      })))
+    }
+
+    setLoadingEdit(false)
+  }
 
   function updateLot(index: number, field: keyof LotForm, value: string) {
     const updated = [...lots]
@@ -50,6 +103,10 @@ export default function NouvelleReceptionPage() {
 
   function removeLot(index: number) {
     if (lots.length === 1) return
+    const lot = lots[index]
+    if (lot.id) {
+      setLotsToDelete([...lotsToDelete, lot.id])
+    }
     setLots(lots.filter((_, i) => i !== index))
   }
 
@@ -60,43 +117,102 @@ export default function NouvelleReceptionPage() {
     }
     setSaving(true)
 
-    const { data: reception, error } = await supabase.from('receptions').insert({
-      fournisseur_id: fournisseurId || null,
-      date_reception: dateReception,
-      numero_bl: numeroBl || null,
-      notes: notes || null,
-    }).select().single()
+    if (isEdit) {
+      // Update reception
+      const { error } = await supabase.from('receptions').update({
+        fournisseur_id: fournisseurId || null,
+        date_reception: dateReception,
+        numero_bl: numeroBl || null,
+        notes: notes || null,
+      }).eq('id', editId)
 
-    if (error || !reception) {
-      alert('Erreur lors de la création de la réception')
-      setSaving(false)
-      return
-    }
+      if (error) {
+        alert('Erreur lors de la modification de la réception')
+        setSaving(false)
+        return
+      }
 
-    const lotsToInsert = lots.map(l => ({
-      reception_id: reception.id,
-      matiere_premiere_id: l.matiere_premiere_id,
-      numero_lot: l.numero_lot,
-      quantite_recue: parseFloat(l.quantite_recue),
-      quantite_restante: parseFloat(l.quantite_recue),
-      date_fabrication: l.date_fabrication || null,
-      date_peremption: l.date_peremption,
-      notes: l.notes || null,
-    }))
+      // Delete removed lots
+      if (lotsToDelete.length > 0) {
+        await supabase.from('production_lots').delete().in('lot_id', lotsToDelete)
+        await supabase.from('lots').delete().in('id', lotsToDelete)
+      }
 
-    const { error: lotsError } = await supabase.from('lots').insert(lotsToInsert)
-    if (lotsError) {
-      alert('Erreur lors de la création des lots')
-      setSaving(false)
-      return
+      // Update existing lots and insert new ones
+      for (const lot of lots) {
+        if (lot.id) {
+          // Update existing lot
+          await supabase.from('lots').update({
+            matiere_premiere_id: lot.matiere_premiere_id,
+            numero_lot: lot.numero_lot,
+            quantite_recue: parseFloat(lot.quantite_recue),
+            quantite_restante: lot.quantite_restante !== undefined
+              ? lot.quantite_restante + (parseFloat(lot.quantite_recue) - (lot.quantite_restante + (parseFloat(lot.quantite_recue) - parseFloat(lot.quantite_recue))))
+              : parseFloat(lot.quantite_recue),
+            date_fabrication: lot.date_fabrication || null,
+            date_peremption: lot.date_peremption,
+            notes: lot.notes || null,
+          }).eq('id', lot.id)
+        } else {
+          // Insert new lot
+          await supabase.from('lots').insert({
+            reception_id: editId,
+            matiere_premiere_id: lot.matiere_premiere_id,
+            numero_lot: lot.numero_lot,
+            quantite_recue: parseFloat(lot.quantite_recue),
+            quantite_restante: parseFloat(lot.quantite_recue),
+            date_fabrication: lot.date_fabrication || null,
+            date_peremption: lot.date_peremption,
+            notes: lot.notes || null,
+          })
+        }
+      }
+    } else {
+      // Create new reception
+      const { data: reception, error } = await supabase.from('receptions').insert({
+        fournisseur_id: fournisseurId || null,
+        date_reception: dateReception,
+        numero_bl: numeroBl || null,
+        notes: notes || null,
+      }).select().single()
+
+      if (error || !reception) {
+        alert('Erreur lors de la création de la réception')
+        setSaving(false)
+        return
+      }
+
+      const lotsToInsert = lots.map(l => ({
+        reception_id: reception.id,
+        matiere_premiere_id: l.matiere_premiere_id,
+        numero_lot: l.numero_lot,
+        quantite_recue: parseFloat(l.quantite_recue),
+        quantite_restante: parseFloat(l.quantite_recue),
+        date_fabrication: l.date_fabrication || null,
+        date_peremption: l.date_peremption,
+        notes: l.notes || null,
+      }))
+
+      const { error: lotsError } = await supabase.from('lots').insert(lotsToInsert)
+      if (lotsError) {
+        alert('Erreur lors de la création des lots')
+        setSaving(false)
+        return
+      }
     }
 
     router.push('/receptions')
   }
 
+  if (loadingEdit) {
+    return <p className="text-gray-500">Chargement de la réception...</p>
+  }
+
   return (
     <div>
-      <h1 className="text-2xl font-bold text-primary-dark mb-6">Nouvelle réception</h1>
+      <h1 className="text-2xl font-bold text-primary-dark mb-6">
+        {isEdit ? 'Modifier la réception' : 'Nouvelle réception'}
+      </h1>
 
       <div className="bg-card rounded-lg shadow p-6 mb-6">
         <h2 className="font-semibold mb-4">Informations générales</h2>
@@ -123,6 +239,17 @@ export default function NouvelleReceptionPage() {
         </div>
       </div>
 
+      {/* Documents section - only in edit mode */}
+      {isEdit && editId && (
+        <div className="bg-card rounded-lg shadow p-6 mb-6">
+          <DocumentManager
+            entityType="reception"
+            entityId={editId}
+            label="Documents de réception (bons de livraison, certificats...)"
+          />
+        </div>
+      )}
+
       <div className="bg-card rounded-lg shadow p-6 mb-6">
         <div className="flex justify-between items-center mb-4">
           <h2 className="font-semibold">Lots reçus</h2>
@@ -131,9 +258,12 @@ export default function NouvelleReceptionPage() {
 
         <div className="space-y-4">
           {lots.map((lot, i) => (
-            <div key={i} className="border rounded-lg p-4 bg-gray-50">
+            <div key={lot.id || `new-${i}`} className="border rounded-lg p-4 bg-gray-50">
               <div className="flex justify-between items-center mb-3">
-                <span className="text-sm font-medium text-gray-600">Lot #{i + 1}</span>
+                <span className="text-sm font-medium text-gray-600">
+                  Lot #{i + 1}
+                  {lot.id && <span className="text-xs text-gray-400 ml-2">(existant)</span>}
+                </span>
                 {lots.length > 1 && (
                   <button onClick={() => removeLot(i)} className="text-red-500 hover:underline text-sm">Retirer</button>
                 )}
@@ -174,7 +304,7 @@ export default function NouvelleReceptionPage() {
 
       <div className="flex gap-3">
         <button onClick={save} disabled={saving} className="bg-primary text-white px-6 py-2 rounded-lg hover:bg-primary-light transition disabled:opacity-50">
-          {saving ? 'Enregistrement...' : 'Enregistrer la réception'}
+          {saving ? 'Enregistrement...' : (isEdit ? 'Enregistrer les modifications' : 'Enregistrer la réception')}
         </button>
         <button onClick={() => router.push('/receptions')} className="bg-gray-200 px-6 py-2 rounded-lg hover:bg-gray-300">
           Annuler
