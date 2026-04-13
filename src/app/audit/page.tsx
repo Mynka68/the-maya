@@ -111,25 +111,83 @@ export default function AuditPage() {
 
     // For product search, we need to find lots used in productions of that product
     if (search.trim() && searchType === 'produit') {
-      const { data: plData } = await supabase
-        .from('production_lots')
-        .select('lot_id, productions(produits_finis(nom))')
+      // 1. Find all produits_finis matching the search
+      const { data: produits } = await supabase
+        .from('produits_finis')
+        .select('id, nom')
+        .ilike('nom', `%${search.trim()}%`)
 
-      const matchingLotIds = new Set<string>()
-      ;(plData as unknown as { lot_id: string; productions: { produits_finis: { nom: string } | null } | null }[] || []).forEach(pl => {
-        if (pl.productions?.produits_finis?.nom?.toLowerCase().includes(search.trim().toLowerCase())) {
-          matchingLotIds.add(pl.lot_id)
+      if (produits && produits.length > 0) {
+        const produitIds = produits.map(p => p.id)
+
+        // 2. Find all productions for these products
+        const { data: prods } = await supabase
+          .from('productions')
+          .select('id')
+          .in('produit_fini_id', produitIds)
+
+        if (prods && prods.length > 0) {
+          const productionIds = prods.map(p => p.id)
+
+          // 3. Find all lot_ids used in these productions
+          const { data: plData } = await supabase
+            .from('production_lots')
+            .select('lot_id')
+            .in('production_id', productionIds)
+
+          const lotIds = [...new Set((plData || []).map(pl => pl.lot_id))]
+
+          if (lotIds.length > 0) {
+            // 4. Also find lots linked via matiere_premiere of these products (lots not yet used)
+            const { data: produitsWithMatiere } = await supabase
+              .from('produits_finis')
+              .select('matiere_premiere_id')
+              .in('id', produitIds)
+              .not('matiere_premiere_id', 'is', null)
+
+            const matiereIds = [...new Set((produitsWithMatiere || []).map(p => p.matiere_premiere_id).filter(Boolean))]
+
+            let allLotQuery = supabase
+              .from('lots')
+              .select('*, matieres_premieres(nom, categorie, unite), receptions(id, date_reception, numero_bl, fournisseurs(nom))')
+              .order('date_peremption', { ascending: true })
+
+            if (matiereIds.length > 0) {
+              // Get lots used in production OR lots of the same matiere premiere
+              allLotQuery = allLotQuery.or(`id.in.(${lotIds.join(',')}),matiere_premiere_id.in.(${matiereIds.join(',')})`)
+            } else {
+              allLotQuery = allLotQuery.in('id', lotIds)
+            }
+
+            const { data: allLots } = await allLotQuery
+            results = (allLots as unknown as LotFull[]) || []
+          } else {
+            results = []
+          }
+        } else {
+          // No productions yet, but show lots of the matiere premiere linked to the product
+          const { data: produitsWithMatiere } = await supabase
+            .from('produits_finis')
+            .select('matiere_premiere_id')
+            .in('id', produitIds)
+            .not('matiere_premiere_id', 'is', null)
+
+          const matiereIds = [...new Set((produitsWithMatiere || []).map(p => p.matiere_premiere_id).filter(Boolean))]
+
+          if (matiereIds.length > 0) {
+            const { data: allLots } = await supabase
+              .from('lots')
+              .select('*, matieres_premieres(nom, categorie, unite), receptions(id, date_reception, numero_bl, fournisseurs(nom))')
+              .in('matiere_premiere_id', matiereIds)
+              .order('date_peremption', { ascending: true })
+            results = (allLots as unknown as LotFull[]) || []
+          } else {
+            results = []
+          }
         }
-      })
-
-      // Also get all lots for those matching
-      const { data: allLots } = await supabase
-        .from('lots')
-        .select('*, matieres_premieres(nom, categorie, unite), receptions(id, date_reception, numero_bl, fournisseurs(nom))')
-        .in('id', Array.from(matchingLotIds))
-        .order('date_peremption', { ascending: true })
-
-      results = (allLots as unknown as LotFull[]) || []
+      } else {
+        results = []
+      }
     }
 
     setLots(results)
