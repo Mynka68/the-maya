@@ -81,6 +81,10 @@ export default function StocksPage() {
   const [allLots, setAllLots] = useState<LotRaw[]>([])
   const [loading, setLoading] = useState(true)
   const [filterCategorie, setFilterCategorie] = useState('')
+  const [filterNiveau, setFilterNiveau] = useState('')
+  const [searchTerm, setSearchTerm] = useState('')
+  const [sortField, setSortField] = useState<'nom' | 'stock' | 'lots' | 'produit'>('nom')
+  const [sortAsc, setSortAsc] = useState(true)
   const [expandedId, setExpandedId] = useState<string | null>(null)
 
   useEffect(() => { load() }, [])
@@ -134,20 +138,57 @@ export default function StocksPage() {
     setLoading(false)
   }
 
+  function getNiveau(stock: StockLine): 'rupture' | 'faible' | 'ok' {
+    if (stock.stock_total <= 0) return 'rupture'
+    if (stock.nb_lots <= 1) return 'faible'
+    return 'ok'
+  }
+
   function niveauBadge(stock: StockLine) {
-    if (stock.stock_total <= 0) return <span className="text-xs px-2 py-1 rounded-full bg-red-100 text-red-800 font-medium">Rupture</span>
-    if (stock.nb_lots <= 1) return <span className="text-xs px-2 py-1 rounded-full bg-orange-100 text-orange-800 font-medium">Faible</span>
+    const n = getNiveau(stock)
+    if (n === 'rupture') return <span className="text-xs px-2 py-1 rounded-full bg-red-100 text-red-800 font-medium">Rupture</span>
+    if (n === 'faible') return <span className="text-xs px-2 py-1 rounded-full bg-orange-100 text-orange-800 font-medium">Faible</span>
     return <span className="text-xs px-2 py-1 rounded-full bg-green-100 text-green-800 font-medium">OK</span>
+  }
+
+  function handleSort(field: typeof sortField) {
+    if (sortField === field) {
+      setSortAsc(!sortAsc)
+    } else {
+      setSortField(field)
+      setSortAsc(true)
+    }
+  }
+
+  function sortIndicator(field: typeof sortField) {
+    if (sortField !== field) return <span className="text-gray-300 ml-1">&#8597;</span>
+    return <span className="ml-1">{sortAsc ? '▲' : '▼'}</span>
   }
 
   function getLotsForMatiere(matiereId: string): LotRaw[] {
     return allLots.filter(l => l.matiere_premiere_id === matiereId)
   }
 
-  const filtered = stocks.filter(s => {
-    if (filterCategorie && s.categorie !== filterCategorie) return false
-    return true
-  })
+  const filtered = stocks
+    .filter(s => {
+      if (filterCategorie && s.categorie !== filterCategorie) return false
+      if (filterNiveau && getNiveau(s) !== filterNiveau) return false
+      if (searchTerm.trim()) {
+        const term = searchTerm.trim().toLowerCase()
+        const matchNom = s.nom.toLowerCase().includes(term)
+        const matchProduit = s.produits_finis.some(p => p.toLowerCase().includes(term))
+        if (!matchNom && !matchProduit) return false
+      }
+      return true
+    })
+    .sort((a, b) => {
+      let cmp = 0
+      if (sortField === 'nom') cmp = a.nom.localeCompare(b.nom)
+      else if (sortField === 'stock') cmp = a.stock_total - b.stock_total
+      else if (sortField === 'lots') cmp = a.nb_lots - b.nb_lots
+      else if (sortField === 'produit') cmp = (a.produits_finis[0] || '').localeCompare(b.produits_finis[0] || '')
+      return sortAsc ? cmp : -cmp
+    })
 
   const totalItems = stocks.length
   const rupture = stocks.filter(s => s.stock_total <= 0).length
@@ -172,14 +213,47 @@ export default function StocksPage() {
         </div>
       </div>
 
-      <div className="flex gap-4 mb-6">
-        <select value={filterCategorie} onChange={(e) => setFilterCategorie(e.target.value)} className="border rounded-lg px-3 py-2 text-sm">
-          <option value="">Toutes catégories</option>
-          <option value="the">Thé</option>
-          <option value="ingredient">Ingrédient</option>
-          <option value="emballage">Emballage</option>
-        </select>
-        <span className="text-sm text-gray-500 self-center">{filtered.length} matière(s)</span>
+      <div className="bg-card rounded-lg shadow p-4 mb-6">
+        <div className="flex flex-wrap gap-3 items-end">
+          <div className="flex-1 min-w-[200px]">
+            <label className="block text-xs text-gray-500 mb-1">Rechercher</label>
+            <input
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Matière première ou produit fini..."
+              className="border rounded-lg px-3 py-2 w-full text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Catégorie</label>
+            <select value={filterCategorie} onChange={(e) => setFilterCategorie(e.target.value)} className="border rounded-lg px-3 py-2 text-sm">
+              <option value="">Toutes</option>
+              <option value="the">Thé</option>
+              <option value="ingredient">Ingrédient</option>
+              <option value="emballage">Emballage</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Niveau</label>
+            <select value={filterNiveau} onChange={(e) => setFilterNiveau(e.target.value)} className="border rounded-lg px-3 py-2 text-sm">
+              <option value="">Tous</option>
+              <option value="ok">OK</option>
+              <option value="faible">Faible</option>
+              <option value="rupture">Rupture</option>
+            </select>
+          </div>
+          <div className="self-end">
+            <span className="text-sm text-gray-500">{filtered.length} matière(s)</span>
+          </div>
+          {(searchTerm || filterCategorie || filterNiveau) && (
+            <button
+              onClick={() => { setSearchTerm(''); setFilterCategorie(''); setFilterNiveau('') }}
+              className="text-sm text-gray-500 hover:text-gray-700 underline self-end"
+            >
+              Effacer les filtres
+            </button>
+          )}
+        </div>
       </div>
 
       {loading ? <p className="text-gray-500">Chargement...</p> : (
@@ -187,11 +261,19 @@ export default function StocksPage() {
           <table className="w-full">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Matière première</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Produit fini</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:text-gray-700 select-none" onClick={() => handleSort('nom')}>
+                  Matière première {sortIndicator('nom')}
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:text-gray-700 select-none" onClick={() => handleSort('produit')}>
+                  Produit fini {sortIndicator('produit')}
+                </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Catégorie</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Stock total</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Lots actifs</th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase cursor-pointer hover:text-gray-700 select-none" onClick={() => handleSort('stock')}>
+                  Stock total {sortIndicator('stock')}
+                </th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase cursor-pointer hover:text-gray-700 select-none" onClick={() => handleSort('lots')}>
+                  Lots actifs {sortIndicator('lots')}
+                </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Niveau</th>
               </tr>
             </thead>
