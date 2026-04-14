@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import Link from 'next/link'
 
 interface LotRaw {
   id: string
@@ -196,7 +197,12 @@ export default function StocksPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-primary-dark mb-6">Stocks</h1>
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-2xl font-bold text-primary-dark">Stocks</h1>
+        <Link href="/stocks/inventaire" className="bg-gray-700 text-white px-4 py-2 rounded-lg hover:bg-gray-800 transition text-sm">
+          📋 Rapport d&apos;inventaire
+        </Link>
+      </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         <div className="bg-card rounded-lg shadow p-5">
