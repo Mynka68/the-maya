@@ -16,6 +16,10 @@ interface LotRaw {
   matieres_premieres: { nom: string; categorie: string; unite: string } | null
 }
 
+interface ProduitFini {
+  nom: string
+}
+
 interface StockLine {
   matiere_premiere_id: string
   nom: string
@@ -23,6 +27,7 @@ interface StockLine {
   unite: string
   stock_total: number
   nb_lots: number
+  produits_finis: string[]
 }
 
 const categorieLabels: Record<string, string> = {
@@ -81,14 +86,28 @@ export default function StocksPage() {
   useEffect(() => { load() }, [])
 
   async function load() {
-    const { data } = await supabase
-      .from('lots')
-      .select('id, matiere_premiere_id, numero_lot, quantite_recue, quantite_restante, date_fabrication, date_peremption, statut, notes, matieres_premieres(nom, categorie, unite)')
-      .in('statut', ['disponible', 'en_cours'])
-      .order('date_peremption', { ascending: true })
+    const [lotsRes, produitsRes] = await Promise.all([
+      supabase
+        .from('lots')
+        .select('id, matiere_premiere_id, numero_lot, quantite_recue, quantite_restante, date_fabrication, date_peremption, statut, notes, matieres_premieres(nom, categorie, unite)')
+        .in('statut', ['disponible', 'en_cours'])
+        .order('date_peremption', { ascending: true }),
+      supabase
+        .from('produits_finis')
+        .select('nom, matiere_premiere_id')
+        .not('matiere_premiere_id', 'is', null),
+    ])
 
-    const lots = (data as unknown as LotRaw[]) || []
+    const lots = (lotsRes.data as unknown as LotRaw[]) || []
     setAllLots(lots)
+
+    // Map matiere_premiere_id -> produit fini names
+    const produitsByMatiere = new Map<string, string[]>()
+    for (const p of (produitsRes.data as unknown as { nom: string; matiere_premiere_id: string }[]) || []) {
+      const existing = produitsByMatiere.get(p.matiere_premiere_id) || []
+      existing.push(p.nom)
+      produitsByMatiere.set(p.matiere_premiere_id, existing)
+    }
 
     // Agréger par matière première
     const map = new Map<string, StockLine>()
@@ -106,6 +125,7 @@ export default function StocksPage() {
           unite: lot.matieres_premieres?.unite || '',
           stock_total: Number(lot.quantite_restante),
           nb_lots: 1,
+          produits_finis: produitsByMatiere.get(id) || [],
         })
       }
     }
@@ -168,6 +188,7 @@ export default function StocksPage() {
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Matière première</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Produit fini</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Catégorie</th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Stock total</th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Lots actifs</th>
@@ -192,6 +213,19 @@ export default function StocksPage() {
                         </div>
                       </td>
                       <td className="px-6 py-4">
+                        {s.produits_finis.length > 0 ? (
+                          <div className="flex flex-wrap gap-1">
+                            {s.produits_finis.map((nom, i) => (
+                              <span key={i} className="text-xs bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">
+                                ☕ {nom}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-gray-400 text-xs">Non associé</span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4">
                         <span className={`text-xs px-2 py-1 rounded-full ${categorieColors[s.categorie] || ''}`}>
                           {categorieLabels[s.categorie] || s.categorie}
                         </span>
@@ -202,7 +236,7 @@ export default function StocksPage() {
                     </tr>
                     {isExpanded && (
                       <tr key={`${s.matiere_premiere_id}-detail`}>
-                        <td colSpan={5} className="px-6 py-0">
+                        <td colSpan={6} className="px-6 py-0">
                           <div className="bg-gray-50 rounded-lg my-2 overflow-hidden border">
                             <table className="w-full">
                               <thead>
@@ -263,7 +297,7 @@ export default function StocksPage() {
                 )
               })}
               {filtered.length === 0 && (
-                <tr><td colSpan={5} className="px-6 py-8 text-center text-gray-400">Aucun stock</td></tr>
+                <tr><td colSpan={6} className="px-6 py-8 text-center text-gray-400">Aucun stock</td></tr>
               )}
             </tbody>
           </table>
