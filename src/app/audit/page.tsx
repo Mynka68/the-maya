@@ -45,7 +45,7 @@ const categorieLabels: Record<string, string> = { the: 'The', ingredient: 'Ingre
 const categorieColors: Record<string, string> = { the: 'bg-green-100 text-green-800', ingredient: 'bg-purple-100 text-purple-800', emballage: 'bg-blue-100 text-blue-800' }
 const statutLabels: Record<string, string> = { disponible: 'Disponible', en_cours: 'En cours', epuise: 'Epuise', perime: 'Perime' }
 const statutColors: Record<string, string> = { disponible: 'bg-green-100 text-green-800', en_cours: 'bg-yellow-100 text-yellow-800', epuise: 'bg-gray-100 text-gray-600', perime: 'bg-red-100 text-red-800' }
-const condLabels: Record<string, string> = { sachet: 'Sachet', boite: 'Boite', echantillon: 'Echantillon' }
+const condLabels: Record<string, string> = { sachet: 'Sachet', boite: 'Boite', pot: 'Pot', echantillon: 'Echantillon' }
 
 function peremptionInfo(dateStr: string): { color: string; label: string } {
   const today = new Date()

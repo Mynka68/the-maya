@@ -24,8 +24,8 @@ interface Production {
   production_lignes: ProductionLigne[]
 }
 
-const condLabels: Record<string, string> = { sachet: 'Sachet', boite: 'Boîte', echantillon: 'Échantillon' }
-const condIcons: Record<string, string> = { sachet: '📦', boite: '🎁', echantillon: '🧪' }
+const condLabels: Record<string, string> = { sachet: 'Sachet', boite: 'Boîte', pot: 'Pot', echantillon: 'Échantillon' }
+const condIcons: Record<string, string> = { sachet: '📦', boite: '🎁', pot: '🎁', echantillon: '🧪' }
 
 const statutLabels: Record<string, string> = { en_cours: 'En cours', terminee: 'Terminée', annulee: 'Annulée' }
 const statutColors: Record<string, string> = { en_cours: 'bg-blue-100 text-blue-800', terminee: 'bg-green-100 text-green-800', annulee: 'bg-red-100 text-red-800' }

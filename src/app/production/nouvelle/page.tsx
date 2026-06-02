@@ -36,6 +36,8 @@ const CONDITIONNEMENTS = [
   { type: 'boite', grammage: 100, label: 'Boîte 100g', icon: '🎁' },
   { type: 'boite', grammage: 50, label: 'Boîte 50g', icon: '🎁' },
   { type: 'boite', grammage: 15, label: 'Boîte 15g', icon: '🎁' },
+  { type: 'pot', grammage: 80, label: 'Pot 80g', icon: '🎁' },
+  { type: 'pot', grammage: 30, label: 'Pot 30g', icon: '🎁' },
   { type: 'echantillon', grammage: 3, label: 'Échantillon 3g', icon: '🧪' },
 ]
 

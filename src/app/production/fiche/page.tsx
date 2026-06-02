@@ -38,7 +38,7 @@ interface Production {
   production_lignes: ProductionLigne[]
 }
 
-const condLabels: Record<string, string> = { sachet: 'Sachet', boite: 'Boite', echantillon: 'Echantillon' }
+const condLabels: Record<string, string> = { sachet: 'Sachet', boite: 'Boite', pot: 'Pot', echantillon: 'Echantillon' }
 
 export default function FicheProductionPage() {
   const searchParams = useSearchParams()
