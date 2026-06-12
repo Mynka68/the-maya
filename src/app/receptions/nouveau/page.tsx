@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter, useSearchParams } from 'next/navigation'
 import DocumentManager from '@/components/DocumentManager'
+import { useFeedback } from '@/components/Feedback'
 
 interface Fournisseur { id: string; nom: string }
 interface Matiere { id: string; nom: string; categorie: string; unite: string }
@@ -13,6 +14,7 @@ interface LotForm {
   numero_lot: string
   quantite_recue: string
   quantite_restante?: number
+  consommee?: number
   date_fabrication: string
   date_peremption: string
   notes: string
@@ -22,6 +24,7 @@ const emptyLot: LotForm = { matiere_premiere_id: '', numero_lot: '', quantite_re
 
 export default function ReceptionFormPage() {
   const router = useRouter()
+  const { toast } = useFeedback()
   const searchParams = useSearchParams()
   const editId = searchParams.get('id')
   const isEdit = !!editId
@@ -59,7 +62,7 @@ export default function ReceptionFormPage() {
       .single()
 
     if (!reception) {
-      alert('Réception introuvable')
+      toast('error', 'Réception introuvable')
       router.push('/receptions')
       return
     }
@@ -82,6 +85,7 @@ export default function ReceptionFormPage() {
         numero_lot: l.numero_lot,
         quantite_recue: String(l.quantite_recue),
         quantite_restante: l.quantite_restante,
+        consommee: l.quantite_recue - l.quantite_restante,
         date_fabrication: l.date_fabrication || '',
         date_peremption: l.date_peremption,
         notes: l.notes || '',
@@ -112,7 +116,7 @@ export default function ReceptionFormPage() {
 
   async function save() {
     if (!lots.every(l => l.matiere_premiere_id && l.numero_lot && l.quantite_recue && l.date_peremption)) {
-      alert('Veuillez remplir tous les champs obligatoires pour chaque lot (matière, n° lot, quantité, date péremption)')
+      toast('error', 'Veuillez remplir tous les champs obligatoires pour chaque lot (matière, n° lot, quantité, date péremption)')
       return
     }
     setSaving(true)
@@ -127,35 +131,44 @@ export default function ReceptionFormPage() {
       }).eq('id', editId)
 
       if (error) {
-        alert('Erreur lors de la modification de la réception')
+        toast('error', `Erreur lors de la modification de la réception : ${error.message}`)
         setSaving(false)
         return
       }
 
       // Delete removed lots
       if (lotsToDelete.length > 0) {
-        await supabase.from('production_lots').delete().in('lot_id', lotsToDelete)
-        await supabase.from('lots').delete().in('id', lotsToDelete)
+        const { error: delError } = await supabase.from('lots').delete().in('id', lotsToDelete)
+        if (delError) {
+          toast('error', `Impossible de supprimer un lot : ${delError.message}. S'il a été utilisé en production, il ne peut pas être supprimé.`)
+          setSaving(false)
+          return
+        }
       }
 
       // Update existing lots and insert new ones
       for (const lot of lots) {
         if (lot.id) {
-          // Update existing lot
-          await supabase.from('lots').update({
+          // La quantité restante suit la nouvelle quantité reçue moins ce qui a déjà été consommé
+          const newRecue = parseFloat(lot.quantite_recue)
+          const consommee = lot.consommee ?? 0
+          const { error: updError } = await supabase.from('lots').update({
             matiere_premiere_id: lot.matiere_premiere_id,
             numero_lot: lot.numero_lot,
-            quantite_recue: parseFloat(lot.quantite_recue),
-            quantite_restante: lot.quantite_restante !== undefined
-              ? lot.quantite_restante + (parseFloat(lot.quantite_recue) - (lot.quantite_restante + (parseFloat(lot.quantite_recue) - parseFloat(lot.quantite_recue))))
-              : parseFloat(lot.quantite_recue),
+            quantite_recue: newRecue,
+            quantite_restante: Math.max(0, newRecue - consommee),
             date_fabrication: lot.date_fabrication || null,
             date_peremption: lot.date_peremption,
             notes: lot.notes || null,
           }).eq('id', lot.id)
+          if (updError) {
+            toast('error', `Erreur sur le lot ${lot.numero_lot} : ${updError.message}`)
+            setSaving(false)
+            return
+          }
         } else {
           // Insert new lot
-          await supabase.from('lots').insert({
+          const { error: insError } = await supabase.from('lots').insert({
             reception_id: editId,
             matiere_premiere_id: lot.matiere_premiere_id,
             numero_lot: lot.numero_lot,
@@ -165,8 +178,14 @@ export default function ReceptionFormPage() {
             date_peremption: lot.date_peremption,
             notes: lot.notes || null,
           })
+          if (insError) {
+            toast('error', `Erreur sur le lot ${lot.numero_lot} : ${insError.message}`)
+            setSaving(false)
+            return
+          }
         }
       }
+      toast('success', 'Réception modifiée')
     } else {
       // Create new reception
       const { data: reception, error } = await supabase.from('receptions').insert({
@@ -177,7 +196,7 @@ export default function ReceptionFormPage() {
       }).select().single()
 
       if (error || !reception) {
-        alert('Erreur lors de la création de la réception')
+        toast('error', `Erreur lors de la création de la réception : ${error?.message || 'erreur inconnue'}`)
         setSaving(false)
         return
       }
@@ -195,10 +214,11 @@ export default function ReceptionFormPage() {
 
       const { error: lotsError } = await supabase.from('lots').insert(lotsToInsert)
       if (lotsError) {
-        alert('Erreur lors de la création des lots')
+        toast('error', `Erreur lors de la création des lots : ${lotsError.message}`)
         setSaving(false)
         return
       }
+      toast('success', 'Réception enregistrée')
     }
 
     router.push('/receptions')

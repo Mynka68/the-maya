@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import DocumentManager from '@/components/DocumentManager'
+import { useFeedback } from '@/components/Feedback'
 
 interface Lot {
   id: string
@@ -75,6 +76,7 @@ function getPeremptionLabel(dateStr: string): string | null {
 
 export default function VoirReceptionPage() {
   const router = useRouter()
+  const { toast } = useFeedback()
   const searchParams = useSearchParams()
   const id = searchParams.get('id')
 
@@ -105,7 +107,7 @@ export default function VoirReceptionPage() {
     ])
 
     if (!recResult.data) {
-      alert('Réception introuvable')
+      toast('error', 'Réception introuvable')
       router.push('/receptions')
       return
     }

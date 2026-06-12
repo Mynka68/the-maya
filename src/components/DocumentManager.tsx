@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
+import { useFeedback } from '@/components/Feedback'
 
 interface Document {
   id: string
@@ -34,6 +35,7 @@ function getFileIcon(mime: string | null): string {
 }
 
 export default function DocumentManager({ entityType, entityId, label = 'Documents' }: DocumentManagerProps) {
+  const { toast, confirm } = useFeedback()
   const [documents, setDocuments] = useState<Document[]>([])
   const [uploading, setUploading] = useState(false)
   const [dragOver, setDragOver] = useState(false)
@@ -69,7 +71,7 @@ export default function DocumentManager({ entityType, entityId, label = 'Documen
         .upload(path, file)
 
       if (uploadError) {
-        alert(`Erreur upload "${file.name}": ${uploadError.message}`)
+        toast('error', `Erreur upload "${file.name}" : ${uploadError.message}`)
         continue
       }
 
@@ -94,7 +96,7 @@ export default function DocumentManager({ entityType, entityId, label = 'Documen
       .createSignedUrl(doc.fichier_path, 3600)
 
     if (error || !data?.signedUrl) {
-      alert('Erreur lors du téléchargement')
+      toast('error', `Erreur lors du téléchargement : ${error?.message || 'lien indisponible'}`)
       return
     }
 
@@ -102,10 +104,16 @@ export default function DocumentManager({ entityType, entityId, label = 'Documen
   }
 
   async function removeFile(doc: Document) {
-    if (!confirm(`Supprimer "${doc.nom}" ?`)) return
+    const ok = await confirm(`Supprimer "${doc.nom}" ?`)
+    if (!ok) return
 
     await supabase.storage.from('documents').remove([doc.fichier_path])
-    await supabase.from('documents').delete().eq('id', doc.id)
+    const { error } = await supabase.from('documents').delete().eq('id', doc.id)
+    if (error) {
+      toast('error', `Erreur lors de la suppression : ${error.message}`)
+      return
+    }
+    toast('success', 'Document supprimé')
     load()
   }
 

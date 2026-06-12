@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
+import { useFeedback } from '@/components/Feedback'
+import { downloadCsv } from '@/lib/csv'
 
 interface ProductionLigne {
   type_conditionnement: string
@@ -41,6 +43,7 @@ function getTotalWeight(prod: Production): number {
 }
 
 export default function ProductionPage() {
+  const { toast, confirm } = useFeedback()
   const [productions, setProductions] = useState<Production[]>([])
   const [loading, setLoading] = useState(true)
   const [expanded, setExpanded] = useState<string | null>(null)
@@ -57,44 +60,53 @@ export default function ProductionPage() {
   }
 
   async function markTerminee(id: string) {
-    await supabase.from('productions').update({ statut: 'terminee' }).eq('id', id)
+    const { error } = await supabase.from('productions').update({ statut: 'terminee' }).eq('id', id)
+    if (error) {
+      toast('error', `Erreur : ${error.message}`)
+      return
+    }
+    toast('success', 'Production marquée terminée')
     load()
   }
 
   async function annulerProduction(id: string) {
-    if (!confirm('Annuler cette production ? Les quantités seront restituées aux lots et la production sera supprimée.')) return
+    const ok = await confirm('Annuler cette production ?\nLes quantités seront restituées aux lots et la production sera supprimée.')
+    if (!ok) return
 
-    // Get lots used by this production
-    const { data: productionLots } = await supabase
-      .from('production_lots')
-      .select('lot_id, quantite_utilisee')
-      .eq('production_id', id)
-
-    // Restore quantities to each lot
-    if (productionLots && productionLots.length > 0) {
-      for (const pl of productionLots) {
-        const { data: lot } = await supabase
-          .from('lots')
-          .select('quantite_restante, quantite_recue')
-          .eq('id', pl.lot_id)
-          .single()
-
-        if (lot) {
-          const newQty = lot.quantite_restante + pl.quantite_utilisee
-          await supabase.from('lots').update({
-            quantite_restante: newQty,
-            statut: newQty >= lot.quantite_recue ? 'disponible' : 'en_cours',
-          }).eq('id', pl.lot_id)
-        }
-      }
+    // Restitution + suppression atomiques côté Postgres
+    const { error } = await supabase.rpc('annuler_production', { p_production_id: id })
+    if (error) {
+      toast('error', `Erreur lors de l'annulation : ${error.message}`)
+      return
     }
-
-    // Delete production (cascade deletes production_lots and production_lignes)
-    await supabase.from('production_lots').delete().eq('production_id', id)
-    await supabase.from('production_lignes').delete().eq('production_id', id)
-    await supabase.from('productions').delete().eq('id', id)
-
+    toast('success', 'Production annulée, quantités restituées aux lots')
     load()
+  }
+
+  function exportCsv() {
+    if (productions.length === 0) {
+      toast('info', 'Aucune production à exporter')
+      return
+    }
+    downloadCsv(`productions_${new Date().toISOString().split('T')[0]}.csv`, productions.map(prod => ({
+      'N° lot produit': prod.numero_lot_produit,
+      'Produit': prod.produits_finis?.nom || '',
+      'Date': prod.date_production,
+      'Statut': statutLabels[prod.statut] || prod.statut,
+      'Conditionnements': prod.production_lignes?.length > 0
+        ? prod.production_lignes.map(l => `${l.quantite} x ${condLabels[l.type_conditionnement] || l.type_conditionnement} ${l.grammage}g`).join(', ')
+        : prod.type_conditionnement && prod.grammage
+          ? `${prod.quantite_produite} x ${condLabels[prod.type_conditionnement] || prod.type_conditionnement} ${prod.grammage}g`
+          : `${prod.quantite_produite} unités`,
+      'Total unités': prod.production_lignes?.length > 0
+        ? prod.production_lignes.reduce((sum, l) => sum + l.quantite, 0)
+        : prod.quantite_produite,
+      'Poids total (kg)': getTotalWeight(prod).toFixed(3),
+      'Lots utilisés': (prod.production_lots || [])
+        .map(pl => `${pl.lots?.numero_lot} (${pl.quantite_utilisee} ${pl.lots?.matieres_premieres?.unite || ''})`)
+        .join(', '),
+      'Notes': prod.notes || '',
+    })))
   }
 
   function renderConditionnements(prod: Production) {
@@ -125,9 +137,14 @@ export default function ProductionPage() {
     <div>
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold text-primary-dark">Production</h1>
-        <Link href="/production/nouvelle" className="bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary-light transition">
-          + Nouvelle production
-        </Link>
+        <div className="flex gap-3">
+          <button onClick={exportCsv} className="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-300 transition text-sm">
+            ⬇️ Export CSV
+          </button>
+          <Link href="/production/nouvelle" className="bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary-light transition">
+            + Nouvelle production
+          </Link>
+        </div>
       </div>
 
       {loading ? <p className="text-gray-500">Chargement...</p> : (

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import DocumentManager from '@/components/DocumentManager'
+import { useFeedback } from '@/components/Feedback'
 
 interface Matiere {
   id: string
@@ -25,6 +26,7 @@ const categorieColors: Record<string, string> = {
 }
 
 export default function MatieresPage() {
+  const { toast, confirm } = useFeedback()
   const [matieres, setMatieres] = useState<Matiere[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
@@ -76,7 +78,8 @@ export default function MatieresPage() {
   }
 
   async function remove(id: string) {
-    if (!confirm('Supprimer cette matière première ?')) return
+    const ok = await confirm('Supprimer cette matière première ?')
+    if (!ok) return
     const { data: docs } = await supabase
       .from('documents')
       .select('fichier_path')
@@ -86,7 +89,12 @@ export default function MatieresPage() {
       await supabase.storage.from('documents').remove(docs.map(d => d.fichier_path))
       await supabase.from('documents').delete().eq('entity_type', 'matiere_premiere').eq('entity_id', id)
     }
-    await supabase.from('matieres_premieres').delete().eq('id', id)
+    const { error } = await supabase.from('matieres_premieres').delete().eq('id', id)
+    if (error) {
+      toast('error', `Impossible de supprimer : ${error.message}. Si elle a des lots associés, elle ne peut pas être supprimée.`)
+      return
+    }
+    toast('success', 'Matière première supprimée')
     load()
   }
 

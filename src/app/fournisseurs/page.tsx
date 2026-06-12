@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { useFeedback } from '@/components/Feedback'
 
 interface Fournisseur {
   id: string
@@ -12,6 +13,7 @@ interface Fournisseur {
 }
 
 export default function FournisseursPage() {
+  const { toast, confirm } = useFeedback()
   const [fournisseurs, setFournisseurs] = useState<Fournisseur[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
@@ -46,8 +48,14 @@ export default function FournisseursPage() {
   }
 
   async function remove(id: string) {
-    if (!confirm('Supprimer ce fournisseur ?')) return
-    await supabase.from('fournisseurs').delete().eq('id', id)
+    const ok = await confirm('Supprimer ce fournisseur ?')
+    if (!ok) return
+    const { error } = await supabase.from('fournisseurs').delete().eq('id', id)
+    if (error) {
+      toast('error', `Impossible de supprimer : ${error.message}. S'il a des réceptions associées, il ne peut pas être supprimé.`)
+      return
+    }
+    toast('success', 'Fournisseur supprimé')
     load()
   }
 

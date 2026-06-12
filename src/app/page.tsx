@@ -22,10 +22,25 @@ interface Production {
   produits_finis: { nom: string } | null
 }
 
+interface MonthBar {
+  label: string
+  kg: number
+  count: number
+}
+
+interface StockMatiere {
+  nom: string
+  unite: string
+  categorie: string
+  total: number
+}
+
 export default function Dashboard() {
   const [lotsExpiring, setLotsExpiring] = useState<Lot[]>([])
   const [recentProductions, setRecentProductions] = useState<Production[]>([])
   const [stats, setStats] = useState({ lotsDisponibles: 0, productionsMois: 0, lotsCritiques: 0, totalMatieres: 0 })
+  const [monthBars, setMonthBars] = useState<MonthBar[]>([])
+  const [stocksMatieres, setStocksMatieres] = useState<StockMatiere[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -36,8 +51,9 @@ export default function Dashboard() {
     const now = new Date()
     const in30days = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0]
+    const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1).toISOString().split('T')[0]
 
-    const [lotsRes, prodsRes, statsLotsRes, statsProdRes, matiereRes] = await Promise.all([
+    const [lotsRes, prodsRes, statsLotsRes, statsProdRes, matiereRes, chartRes, stockRes] = await Promise.all([
       supabase
         .from('lots')
         .select('*, matieres_premieres(nom, unite)')
@@ -61,6 +77,14 @@ export default function Dashboard() {
       supabase
         .from('matieres_premieres')
         .select('id', { count: 'exact' }),
+      supabase
+        .from('productions')
+        .select('date_production, quantite_produite, grammage, production_lignes(grammage, quantite)')
+        .gte('date_production', sixMonthsAgo),
+      supabase
+        .from('lots')
+        .select('quantite_restante, matieres_premieres(nom, unite, categorie)')
+        .in('statut', ['disponible', 'en_cours']),
     ])
 
     setLotsExpiring((lotsRes.data as unknown as Lot[]) || [])
@@ -71,6 +95,41 @@ export default function Dashboard() {
       lotsCritiques: (lotsRes.data || []).length,
       totalMatieres: matiereRes.count || 0,
     })
+
+    // Productions par mois (6 derniers mois)
+    interface ChartProd { date_production: string; quantite_produite: number; grammage: number | null; production_lignes: { grammage: number; quantite: number }[] }
+    const chartProds = (chartRes.data as unknown as ChartProd[]) || []
+    const bars: MonthBar[] = []
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+      const inMonth = chartProds.filter(p => p.date_production.startsWith(key))
+      const kg = inMonth.reduce((sum, p) => {
+        if (p.production_lignes?.length > 0) {
+          return sum + p.production_lignes.reduce((s, l) => s + l.quantite * l.grammage, 0) / 1000
+        }
+        return sum + (p.grammage ? p.quantite_produite * p.grammage / 1000 : 0)
+      }, 0)
+      bars.push({
+        label: d.toLocaleDateString('fr-FR', { month: 'short' }),
+        kg: Math.round(kg * 100) / 100,
+        count: inMonth.length,
+      })
+    }
+    setMonthBars(bars)
+
+    // Stock total par matière première (lots disponibles + en cours)
+    interface StockLot { quantite_restante: number; matieres_premieres: { nom: string; unite: string; categorie: string } | null }
+    const stockLots = (stockRes.data as unknown as StockLot[]) || []
+    const byMatiere: Record<string, StockMatiere> = {}
+    for (const lot of stockLots) {
+      if (!lot.matieres_premieres) continue
+      const m = lot.matieres_premieres
+      if (!byMatiere[m.nom]) byMatiere[m.nom] = { nom: m.nom, unite: m.unite, categorie: m.categorie, total: 0 }
+      byMatiere[m.nom].total += lot.quantite_restante
+    }
+    setStocksMatieres(Object.values(byMatiere).sort((a, b) => a.total - b.total))
+
     setLoading(false)
   }
 
@@ -88,9 +147,24 @@ export default function Dashboard() {
 
   if (loading) return <div className="flex items-center justify-center h-64"><p className="text-gray-500">Chargement...</p></div>
 
+  const maxKg = Math.max(...monthBars.map(b => b.kg), 0.001)
+
   return (
     <div>
-      <h1 className="text-2xl font-bold text-primary-dark mb-6">Dashboard</h1>
+      <div className="flex flex-wrap justify-between items-center gap-3 mb-6">
+        <h1 className="text-2xl font-bold text-primary-dark">Dashboard</h1>
+        <div className="flex gap-2">
+          <Link href="/production/nouvelle" className="bg-primary text-white px-4 py-2 rounded-lg text-sm hover:bg-primary-light transition">
+            + Nouvelle production
+          </Link>
+          <Link href="/receptions/nouveau" className="bg-primary/10 text-primary px-4 py-2 rounded-lg text-sm hover:bg-primary/20 transition">
+            + Nouvelle réception
+          </Link>
+          <Link href="/stocks/inventaire" className="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm hover:bg-gray-300 transition">
+            🖨️ Inventaire
+          </Link>
+        </div>
+      </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
         <div className="bg-card rounded-lg shadow p-5">
@@ -108,6 +182,61 @@ export default function Dashboard() {
         <div className="bg-card rounded-lg shadow p-5">
           <p className="text-sm text-gray-500">Matières premières</p>
           <p className="text-3xl font-bold text-primary">{stats.totalMatieres}</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        {/* Productions des 6 derniers mois */}
+        <div className="bg-card rounded-lg shadow">
+          <div className="p-5 border-b">
+            <h2 className="font-semibold text-lg">Production des 6 derniers mois</h2>
+          </div>
+          <div className="p-5">
+            {monthBars.every(b => b.count === 0) ? (
+              <p className="text-gray-400 text-sm">Aucune production sur la période</p>
+            ) : (
+              <div className="flex items-end gap-3 h-44">
+                {monthBars.map((b, i) => (
+                  <div key={i} className="flex-1 flex flex-col items-center justify-end h-full">
+                    <span className="text-xs font-medium text-gray-600 mb-1">
+                      {b.kg > 0 ? `${b.kg} kg` : ''}
+                    </span>
+                    <div
+                      className="w-full bg-primary/80 rounded-t hover:bg-primary transition"
+                      style={{ height: `${Math.max((b.kg / maxKg) * 100, b.count > 0 ? 4 : 1)}%` }}
+                      title={`${b.count} production(s) — ${b.kg} kg`}
+                    />
+                    <span className="text-xs text-gray-500 mt-2 capitalize">{b.label}</span>
+                    <span className="text-[10px] text-gray-400">{b.count} prod.</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Stocks par matière première */}
+        <div className="bg-card rounded-lg shadow">
+          <div className="p-5 border-b flex justify-between items-center">
+            <h2 className="font-semibold text-lg">Stocks par matière</h2>
+            <Link href="/stocks" className="text-sm text-primary hover:underline">Voir tout</Link>
+          </div>
+          <div className="p-5">
+            {stocksMatieres.length === 0 ? (
+              <p className="text-gray-400 text-sm">Aucun stock disponible</p>
+            ) : (
+              <div className="space-y-2 max-h-44 overflow-y-auto">
+                {stocksMatieres.slice(0, 10).map((m, i) => (
+                  <div key={i} className="flex items-center justify-between text-sm">
+                    <span className="truncate mr-2">{m.nom}</span>
+                    <span className={`font-medium whitespace-nowrap ${m.total <= 0 ? 'text-red-600' : m.total < 1 ? 'text-orange-500' : 'text-gray-700'}`}>
+                      {Math.round(m.total * 1000) / 1000} {m.unite}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
+import { useFeedback } from '@/components/Feedback'
 
 interface ProduitFini {
   id: string
@@ -61,6 +62,7 @@ function getDaysLeft(dateStr: string): string {
 
 export default function NouvelleProductionPage() {
   const router = useRouter()
+  const { toast } = useFeedback()
   const [produits, setProduits] = useState<ProduitFini[]>([])
   const [allLots, setAllLots] = useState<Lot[]>([])
   const [produitId, setProduitId] = useState('')
@@ -179,77 +181,48 @@ export default function NouvelleProductionPage() {
 
   async function save() {
     if (!produitId) {
-      alert('Veuillez sélectionner un produit')
+      toast('error', 'Veuillez sélectionner un produit')
       return
     }
     const validLignes = lignes.filter(l => parseInt(l.quantite) > 0)
     if (validLignes.length === 0) {
-      alert('Veuillez ajouter au moins un conditionnement avec une quantité')
+      toast('error', 'Veuillez ajouter au moins un conditionnement avec une quantité')
       return
     }
     const validLots = lotsUtilises.filter(l => l.lot_id && l.quantite_utilisee && parseFloat(l.quantite_utilisee) > 0)
     if (validLots.length === 0) {
-      alert('Veuillez affecter de la matière première depuis au moins un lot')
+      toast('error', 'Veuillez affecter de la matière première depuis au moins un lot')
       return
     }
 
     for (const lu of validLots) {
       const lot = getLotInfo(lu.lot_id)
       if (lot && parseFloat(lu.quantite_utilisee) > lot.quantite_restante) {
-        alert(`Quantité demandée pour le lot ${lot.numero_lot} dépasse le stock restant (${lot.quantite_restante} ${lot.matieres_premieres?.unite})`)
+        toast('error', `Quantité demandée pour le lot ${lot.numero_lot} dépasse le stock restant (${lot.quantite_restante} ${lot.matieres_premieres?.unite})`)
         return
       }
     }
 
     setSaving(true)
 
-    // Create production with total quantity and first conditionnement for backward compat
-    const { data: production, error } = await supabase.from('productions').insert({
-      produit_fini_id: produitId,
-      date_production: dateProduction,
-      quantite_produite: totalUnites,
-      type_conditionnement: validLignes[0].type,
-      grammage: validLignes[0].grammage,
-      numero_lot_produit: `PROD-${Date.now()}`,
-      notes: notes || null,
-    }).select().single()
+    // Création atomique côté Postgres : production + lignes + lots + décrément stocks
+    const { data: productionId, error } = await supabase.rpc('create_production', {
+      p_produit_fini_id: produitId,
+      p_date_production: dateProduction,
+      p_numero_lot_produit: `PROD-${Date.now()}`,
+      p_notes: notes || null,
+      p_lignes: validLignes.map(l => ({ type: l.type, grammage: l.grammage, quantite: parseInt(l.quantite) })),
+      p_lots: validLots.map(l => ({ lot_id: l.lot_id, quantite: parseFloat(l.quantite_utilisee) })),
+    })
 
-    if (error || !production) {
-      alert('Erreur lors de la création de la production')
+    if (error || !productionId) {
+      toast('error', `Erreur lors de la création de la production : ${error?.message || 'erreur inconnue'}`)
       setSaving(false)
       return
     }
 
-    // Insert production lines
-    const lignesInsert = validLignes.map(l => ({
-      production_id: production.id,
-      type_conditionnement: l.type,
-      grammage: l.grammage,
-      quantite: parseInt(l.quantite),
-    }))
-    await supabase.from('production_lignes').insert(lignesInsert)
-
-    // Insert lot usage
-    const productionLots = validLots.map(l => ({
-      production_id: production.id,
-      lot_id: l.lot_id,
-      quantite_utilisee: parseFloat(l.quantite_utilisee),
-    }))
-    await supabase.from('production_lots').insert(productionLots)
-
-    // Update lot quantities
-    for (const lu of validLots) {
-      const lot = getLotInfo(lu.lot_id)
-      if (lot) {
-        const newQty = lot.quantite_restante - parseFloat(lu.quantite_utilisee)
-        await supabase.from('lots').update({
-          quantite_restante: newQty,
-          statut: newQty <= 0 ? 'epuise' : 'en_cours',
-        }).eq('id', lu.lot_id)
-      }
-    }
-
-    router.push(`/production/fiche?id=${production.id}`)
+    toast('success', 'Production enregistrée')
+    router.push(`/production/fiche?id=${productionId}`)
   }
 
   const ligneTypes = lignes.map(l => `${l.type}-${l.grammage}`)

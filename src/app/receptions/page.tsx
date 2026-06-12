@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
 import DocumentManager from '@/components/DocumentManager'
+import { useFeedback } from '@/components/Feedback'
 
 interface Reception {
   id: string
@@ -20,6 +21,7 @@ interface DocCount {
 }
 
 export default function ReceptionsPage() {
+  const { toast, confirm } = useFeedback()
   const [receptions, setReceptions] = useState<Reception[]>([])
   const [loading, setLoading] = useState(true)
   const [expandedId, setExpandedId] = useState<string | null>(null)
@@ -53,7 +55,8 @@ export default function ReceptionsPage() {
   }
 
   async function remove(id: string) {
-    if (!confirm('Supprimer cette réception et ses lots ?')) return
+    const ok = await confirm('Supprimer cette réception et ses lots ?')
+    if (!ok) return
     // Delete associated documents from storage
     const { data: docs } = await supabase
       .from('documents')
@@ -64,8 +67,17 @@ export default function ReceptionsPage() {
       await supabase.storage.from('documents').remove(docs.map(d => d.fichier_path))
       await supabase.from('documents').delete().eq('entity_type', 'reception').eq('entity_id', id)
     }
-    await supabase.from('lots').delete().eq('reception_id', id)
-    await supabase.from('receptions').delete().eq('id', id)
+    const { error: lotsError } = await supabase.from('lots').delete().eq('reception_id', id)
+    if (lotsError) {
+      toast('error', `Impossible de supprimer les lots : ${lotsError.message}. S'ils ont été utilisés en production, ils ne peuvent pas être supprimés.`)
+      return
+    }
+    const { error } = await supabase.from('receptions').delete().eq('id', id)
+    if (error) {
+      toast('error', `Erreur lors de la suppression : ${error.message}`)
+      return
+    }
+    toast('success', 'Réception supprimée')
     load()
   }
 

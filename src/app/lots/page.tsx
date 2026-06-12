@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { downloadCsv } from '@/lib/csv'
 
 interface Lot {
   id: string
@@ -66,9 +67,30 @@ export default function LotsPage() {
     return true
   })
 
+  function exportCsv() {
+    downloadCsv(`lots_${new Date().toISOString().split('T')[0]}.csv`, filtered.map(lot => ({
+      'N° lot': lot.numero_lot,
+      'Matière': lot.matieres_premieres?.nom || '',
+      'Catégorie': lot.matieres_premieres?.categorie || '',
+      'Fournisseur': lot.receptions?.fournisseurs?.nom || '',
+      'Quantité reçue': lot.quantite_recue,
+      'Quantité restante': lot.quantite_restante,
+      'Unité': lot.matieres_premieres?.unite || '',
+      'Date fabrication': lot.date_fabrication || '',
+      'Date péremption': lot.date_peremption,
+      'Statut': statutLabels[lot.statut] || lot.statut,
+      'Notes': lot.notes || '',
+    })))
+  }
+
   return (
     <div>
-      <h1 className="text-2xl font-bold text-primary-dark mb-6">Lots</h1>
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-2xl font-bold text-primary-dark">Lots</h1>
+        <button onClick={exportCsv} className="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-300 transition text-sm">
+          ⬇️ Export CSV
+        </button>
+      </div>
 
       <div className="flex gap-4 mb-6">
         <select value={filterCategorie} onChange={(e) => setFilterCategorie(e.target.value)} className="border rounded-lg px-3 py-2 text-sm">
