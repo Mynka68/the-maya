@@ -26,6 +26,7 @@ interface LigneConditionnement {
   grammage: number
   label: string
   quantite: string
+  custom?: boolean
 }
 
 interface LotUsage { lot_id: string; quantite_utilisee: string }
@@ -41,6 +42,8 @@ const CONDITIONNEMENTS = [
   { type: 'pot', grammage: 30, label: 'Pot 30g', icon: '🎁' },
   { type: 'echantillon', grammage: 3, label: 'Échantillon 3g', icon: '🧪' },
 ]
+
+const TYPE_LABELS: Record<string, string> = { sachet: 'Sachet', boite: 'Boîte', pot: 'Pot', echantillon: 'Échantillon' }
 
 function getPeremptionColor(dateStr: string): string {
   const today = new Date()
@@ -127,6 +130,20 @@ export default function NouvelleProductionPage() {
     setLignes([...lignes, { type: c.type, grammage: c.grammage, label: c.label, quantite: '' }])
   }
 
+  function addCustomLigne() {
+    setLignes([...lignes, { type: 'pot', grammage: 0, label: 'Pot ?g', quantite: '', custom: true }])
+  }
+
+  function updateLigneCustom(index: number, field: 'type' | 'grammage', value: string) {
+    const updated = [...lignes]
+    const l = { ...updated[index] }
+    if (field === 'type') l.type = value
+    else l.grammage = parseInt(value) || 0
+    l.label = `${TYPE_LABELS[l.type] || l.type} ${l.grammage > 0 ? l.grammage : '?'}g`
+    updated[index] = l
+    setLignes(updated)
+  }
+
   function updateLigneQuantite(index: number, quantite: string) {
     const updated = [...lignes]
     updated[index] = { ...updated[index], quantite }
@@ -187,6 +204,10 @@ export default function NouvelleProductionPage() {
     const validLignes = lignes.filter(l => parseInt(l.quantite) > 0)
     if (validLignes.length === 0) {
       toast('error', 'Veuillez ajouter au moins un conditionnement avec une quantité')
+      return
+    }
+    if (validLignes.some(l => !l.grammage || l.grammage <= 0)) {
+      toast('error', 'Veuillez indiquer le poids (en grammes) de chaque conditionnement personnalisé')
       return
     }
     const validLots = lotsUtilises.filter(l => l.lot_id && l.quantite_utilisee && parseFloat(l.quantite_utilisee) > 0)
@@ -282,7 +303,7 @@ export default function NouvelleProductionPage() {
         <h2 className="font-semibold mb-4">Conditionnements</h2>
 
         {/* Boutons pour ajouter */}
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-2 mb-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-2 mb-4">
           {CONDITIONNEMENTS.map((c, i) => {
             const key = `${c.type}-${c.grammage}`
             const isAdded = ligneTypes.includes(key)
@@ -304,6 +325,15 @@ export default function NouvelleProductionPage() {
               </button>
             )
           })}
+          <button
+            type="button"
+            onClick={addCustomLigne}
+            className="border border-dashed border-gray-300 rounded-lg px-3 py-3 text-sm text-center transition hover:border-primary hover:bg-primary/5 text-gray-700"
+          >
+            <div className="font-medium">⚖️</div>
+            <div className="mt-1">Poids libre</div>
+            <div className="text-xs mt-1 text-gray-400">commandes spéciales</div>
+          </button>
         </div>
 
         {/* Lignes ajoutées */}
@@ -315,8 +345,30 @@ export default function NouvelleProductionPage() {
               const condInfo = CONDITIONNEMENTS.find(c => c.type === ligne.type && c.grammage === ligne.grammage)
               return (
                 <div key={i} className="flex items-center gap-3 border rounded-lg p-3 bg-gray-50">
-                  <span className="text-lg">{condInfo?.icon || '📦'}</span>
-                  <span className="font-medium text-sm w-32">{ligne.label}</span>
+                  <span className="text-lg">{ligne.custom ? '⚖️' : condInfo?.icon || '📦'}</span>
+                  {ligne.custom ? (
+                    <div className="flex items-center gap-2 w-56">
+                      <select
+                        value={ligne.type}
+                        onChange={(e) => updateLigneCustom(i, 'type', e.target.value)}
+                        className="border rounded-lg px-2 py-2 text-sm"
+                      >
+                        {Object.entries(TYPE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                      </select>
+                      <input
+                        type="number"
+                        step="1"
+                        min="1"
+                        placeholder="Poids"
+                        value={ligne.grammage > 0 ? ligne.grammage : ''}
+                        onChange={(e) => updateLigneCustom(i, 'grammage', e.target.value)}
+                        className="border rounded-lg px-2 py-2 w-20 text-sm"
+                      />
+                      <span className="text-xs text-gray-500">g</span>
+                    </div>
+                  ) : (
+                    <span className="font-medium text-sm w-32">{ligne.label}</span>
+                  )}
                   <div className="flex-1">
                     <input
                       type="number"
