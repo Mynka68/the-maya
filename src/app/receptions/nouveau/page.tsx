@@ -58,6 +58,7 @@ export default function ReceptionFormPage() {
   const [loadingEdit, setLoadingEdit] = useState(isEdit)
   const [lotsToDelete, setLotsToDelete] = useState<string[]>([])
   const [importing, setImporting] = useState(false)
+  const [importedFile, setImportedFile] = useState<File | null>(null)
 
   useEffect(() => {
     Promise.all([
@@ -161,6 +162,7 @@ export default function ReceptionFormPage() {
         toast('error', data.error || "Échec de l'extraction du bon")
         return
       }
+      setImportedFile(file)
       applyBon(data.bon as ExtractedBon)
     } catch (e) {
       toast('error', `Erreur : ${e instanceof Error ? e.message : 'inconnue'}`)
@@ -200,7 +202,7 @@ export default function ReceptionFormPage() {
       'success',
       `${newLots.length} ligne(s) importée(s), ${matched} rapprochée(s) automatiquement` +
         (unmatched ? `, ${unmatched} à compléter` : '') +
-        '. Vérifiez les quantités (le bon est en « Unit », votre stock en kg).',
+        '. Le PDF sera joint à la réception.',
     )
   }
 
@@ -308,6 +310,28 @@ export default function ReceptionFormPage() {
         setSaving(false)
         return
       }
+
+      // Joindre le bon de livraison importé à la réception
+      if (importedFile) {
+        const { data: { user } } = await supabase.auth.getUser()
+        const safeName = importedFile.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+        const path = `reception/${reception.id}/${Date.now()}_${safeName}`
+        const { error: upErr } = await supabase.storage.from('documents').upload(path, importedFile)
+        if (upErr) {
+          toast('info', `Réception enregistrée, mais le PDF n'a pas pu être joint : ${upErr.message}`)
+        } else {
+          await supabase.from('documents').insert({
+            entity_type: 'reception',
+            entity_id: reception.id,
+            nom: importedFile.name,
+            fichier_path: path,
+            taille: importedFile.size,
+            type_mime: importedFile.type || null,
+            uploaded_by: user?.id || null,
+          })
+        }
+      }
+
       toast('success', 'Réception enregistrée')
     }
 
@@ -331,6 +355,9 @@ export default function ReceptionFormPage() {
             <p className="text-xs text-gray-500 mt-0.5">
               Scan ou PDF — la date, le n° de BL et les lots sont pré-remplis (rapprochement par code article).
             </p>
+            {importedFile && (
+              <p className="text-xs text-green-700 mt-1">✓ {importedFile.name} — sera joint à la réception</p>
+            )}
           </div>
           <label className={`inline-block px-4 py-2 rounded-lg text-sm transition ${importing ? 'bg-gray-300 text-gray-500 cursor-wait' : 'bg-primary text-white hover:bg-primary-light cursor-pointer'}`}>
             {importing ? '⏳ Analyse en cours…' : 'Choisir un fichier'}
