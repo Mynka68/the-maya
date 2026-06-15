@@ -22,6 +22,24 @@ interface LotForm {
 
 const emptyLot: LotForm = { matiere_premiere_id: '', numero_lot: '', quantite_recue: '', date_fabrication: '', date_peremption: '', notes: '' }
 
+interface BonLigne {
+  code: string
+  description: string
+  quantite: number
+  unite?: string
+  numero_lot?: string | null
+  date_peremption?: string | null
+}
+interface ExtractedBon {
+  fournisseur?: string
+  date_livraison?: string
+  numero_bl?: string
+  numero_commande?: string | null
+  lignes?: BonLigne[]
+}
+
+const isoDate = (d?: string | null) => (d && /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : '')
+
 export default function ReceptionFormPage() {
   const router = useRouter()
   const { toast } = useFeedback()
@@ -39,6 +57,7 @@ export default function ReceptionFormPage() {
   const [saving, setSaving] = useState(false)
   const [loadingEdit, setLoadingEdit] = useState(isEdit)
   const [lotsToDelete, setLotsToDelete] = useState<string[]>([])
+  const [importing, setImporting] = useState(false)
 
   useEffect(() => {
     Promise.all([
@@ -112,6 +131,77 @@ export default function ReceptionFormPage() {
       setLotsToDelete([...lotsToDelete, lot.id])
     }
     setLots(lots.filter((_, i) => i !== index))
+  }
+
+  // Retrouve la matière première dont le nom commence par le même code article que la ligne du bon.
+  function matiereIdForCode(code: string): string {
+    const digits = (code || '').replace(/\D/g, '')
+    if (!digits) return ''
+    const found = matieres.find(m => ((m.nom.match(/\d+/) || [])[0] === digits))
+    return found?.id || ''
+  }
+
+  async function importBon(file: File) {
+    setImporting(true)
+    try {
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve((reader.result as string).split(',')[1])
+        reader.onerror = () => reject(new Error('Lecture du fichier impossible'))
+        reader.readAsDataURL(file)
+      })
+
+      const res = await fetch('/api/extract-bon', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ fileBase64: base64, mediaType: file.type }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        toast('error', data.error || "Échec de l'extraction du bon")
+        return
+      }
+      applyBon(data.bon as ExtractedBon)
+    } catch (e) {
+      toast('error', `Erreur : ${e instanceof Error ? e.message : 'inconnue'}`)
+    } finally {
+      setImporting(false)
+    }
+  }
+
+  function applyBon(bon: ExtractedBon) {
+    if (bon.fournisseur) {
+      const needle = bon.fournisseur.toLowerCase()
+      const f = fournisseurs.find(x => needle.includes(x.nom.toLowerCase()) || x.nom.toLowerCase().includes(needle))
+      if (f) setFournisseurId(f.id)
+    }
+    if (isoDate(bon.date_livraison)) setDateReception(bon.date_livraison!)
+    if (bon.numero_bl) setNumeroBl(bon.numero_bl)
+    if (bon.numero_commande) setNotes(`Commande ${bon.numero_commande}`)
+
+    const newLots: LotForm[] = (bon.lignes || []).map(l => ({
+      matiere_premiere_id: matiereIdForCode(l.code),
+      numero_lot: l.numero_lot || '',
+      quantite_recue: l.quantite != null ? String(l.quantite) : '',
+      date_fabrication: '',
+      date_peremption: isoDate(l.date_peremption),
+      notes: `${l.code || ''} ${l.description || ''}`.trim(),
+    }))
+
+    if (newLots.length === 0) {
+      toast('error', "Aucune ligne article n'a été trouvée sur le bon.")
+      return
+    }
+
+    setLots(newLots)
+    const matched = newLots.filter(l => l.matiere_premiere_id).length
+    const unmatched = newLots.length - matched
+    toast(
+      'success',
+      `${newLots.length} ligne(s) importée(s), ${matched} rapprochée(s) automatiquement` +
+        (unmatched ? `, ${unmatched} à compléter` : '') +
+        '. Vérifiez les quantités (le bon est en « Unit », votre stock en kg).',
+    )
   }
 
   async function save() {
@@ -233,6 +323,27 @@ export default function ReceptionFormPage() {
       <h1 className="text-2xl font-bold text-primary-dark mb-6">
         {isEdit ? 'Modifier la réception' : 'Nouvelle réception'}
       </h1>
+
+      {!isEdit && (
+        <div className="bg-primary/5 border border-primary/20 rounded-lg p-4 mb-6 flex items-center justify-between gap-4 flex-wrap">
+          <div>
+            <p className="text-sm font-medium text-primary-dark">📄 Importer un bon de livraison</p>
+            <p className="text-xs text-gray-500 mt-0.5">
+              Scan ou PDF — la date, le n° de BL et les lots sont pré-remplis (rapprochement par code article).
+            </p>
+          </div>
+          <label className={`inline-block px-4 py-2 rounded-lg text-sm transition ${importing ? 'bg-gray-300 text-gray-500 cursor-wait' : 'bg-primary text-white hover:bg-primary-light cursor-pointer'}`}>
+            {importing ? '⏳ Analyse en cours…' : 'Choisir un fichier'}
+            <input
+              type="file"
+              accept=".pdf,image/*"
+              className="hidden"
+              disabled={importing}
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) importBon(f); e.target.value = '' }}
+            />
+          </label>
+        </div>
+      )}
 
       <div className="bg-card rounded-lg shadow p-6 mb-6">
         <h2 className="font-semibold mb-4">Informations générales</h2>
