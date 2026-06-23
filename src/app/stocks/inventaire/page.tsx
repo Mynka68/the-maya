@@ -228,7 +228,7 @@ export default function InventairePage() {
                         <span className="text-xs text-gray-500 ml-2">({group.unite})</span>
                       </td>
                       <td className="border border-gray-300 px-3 py-2 text-right font-bold matiere-header">
-                        {showTheorique ? `${group.stock_theorique.toFixed(2)} ${group.unite}` : ''}
+                        {showTheorique ? `${group.stock_theorique.toFixed(3)} ${group.unite}` : ''}
                       </td>
                       <td className="border border-gray-300 px-3 py-2 bg-yellow-50/50 matiere-header">
                         <div className="input-physique rounded px-1">&nbsp;</div>

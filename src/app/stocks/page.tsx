@@ -318,7 +318,7 @@ export default function StocksPage() {
                           {categorieLabels[s.categorie] || s.categorie}
                         </span>
                       </td>
-                      <td className="px-6 py-4 text-right font-medium">{s.stock_total.toFixed(2)} {s.unite}</td>
+                      <td className="px-6 py-4 text-right font-medium">{s.stock_total.toFixed(3)} {s.unite}</td>
                       <td className="px-6 py-4 text-right">{s.nb_lots}</td>
                       <td className="px-6 py-4">{niveauBadge(s)}</td>
                     </tr>
