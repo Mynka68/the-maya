@@ -10,6 +10,7 @@ const navItems = [
   { href: '/lots', label: 'Lots', icon: '🏷️' },
   { href: '/stocks', label: 'Stocks', icon: '📋' },
   { href: '/production', label: 'Production', icon: '🏭' },
+  { href: '/historique', label: 'Historique', icon: '📜' },
   { href: '/matieres', label: 'Matières premières', icon: '🍃' },
   { href: '/produits', label: 'Produits finis', icon: '☕' },
   { href: '/fournisseurs', label: 'Fournisseurs', icon: '🤝' },
