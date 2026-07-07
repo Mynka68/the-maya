@@ -82,7 +82,7 @@ export default function InventairePage() {
     ? groups.filter(g => g.categorie === filterCategorie)
     : groups
 
-  // Regroupement par catégorie pour les sous-titres de section
+  // Regroupement par catégorie
   const sections: { categorie: string; items: MatiereGroup[] }[] = []
   let currentCat = ''
   for (const g of filtered) {
@@ -97,6 +97,12 @@ export default function InventairePage() {
   const totalLots = filtered.reduce((s, g) => s + g.lots.length, 0)
   const perimetre = filterCategorie ? (categorieLabels[filterCategorie] || filterCategorie) : 'Toutes catégories'
 
+  const emptyBox = <div className="input-physique rounded px-1">&nbsp;</div>
+  const emptyEcart = <div className="input-ecart rounded px-1">&nbsp;</div>
+  const checkbox = (small?: boolean) => (
+    <div className={`${small ? 'w-3.5 h-3.5' : 'w-4 h-4'} border-2 border-gray-500 rounded mx-auto`}></div>
+  )
+
   if (loading) return <p className="text-gray-500 p-6">Chargement...</p>
 
   return (
@@ -106,7 +112,10 @@ export default function InventairePage() {
         <div className="flex justify-between items-center mb-4">
           <div>
             <h1 className="text-2xl font-bold text-primary-dark">Rapport d&apos;inventaire</h1>
-            <p className="text-sm text-gray-500 mt-1">Imprimez ce rapport pour le contrôle physique du stock (en-tête et pagination sur chaque page)</p>
+            <p className="text-sm text-gray-500 mt-1">
+              Imprimez pour le contrôle physique (en-tête et « Page X / Y » sur chaque page).
+              Dans le dialogue d&apos;impression, laissez <strong>Marges : Par défaut</strong>.
+            </p>
           </div>
           <div className="flex gap-3">
             <button
@@ -141,11 +150,12 @@ export default function InventairePage() {
         </div>
       </div>
 
-      {/* Rapport : table-enveloppe pour répéter le bandeau sur chaque page imprimée */}
-      <table className="report-shell" id="rapport-inventaire">
+      {/* Rapport : une seule table, le thead (bandeau + colonnes) se répète sur chaque page */}
+      <table className="report" id="rapport-inventaire">
         <thead>
+          {/* Bandeau d'en-tête */}
           <tr>
-            <td>
+            <th colSpan={7} className="band-cell">
               <div className="report-band">
                 <div className="report-band-left">
                   <div className="report-band-title">🍵 THÉ MAYA — RAPPORT D&apos;INVENTAIRE</div>
@@ -157,131 +167,109 @@ export default function InventairePage() {
                   <div>{totalMatieres} matière(s) · {totalLots} lot(s)</div>
                 </div>
               </div>
-            </td>
+            </th>
+          </tr>
+          {/* En-têtes de colonnes (groupés) */}
+          <tr className="colhead">
+            <th rowSpan={2} className="text-left">Matière / N° lot</th>
+            <th rowSpan={2} className="text-left" style={{ width: '80px' }}>Péremption</th>
+            <th rowSpan={2} className="text-right" style={{ width: '90px' }}>{showTheorique ? 'Stock app.' : ''}</th>
+            <th colSpan={4} className="text-center fill-col">À compléter par le contrôleur</th>
+          </tr>
+          <tr className="colhead">
+            <th className="text-center fill-col" style={{ width: '110px' }}>Stock physique</th>
+            <th className="text-center fill-col" style={{ width: '70px' }}>Écart</th>
+            <th className="text-center fill-col" style={{ width: '42px' }}>OK</th>
+            <th className="text-left fill-col">Observations</th>
           </tr>
         </thead>
+
         <tbody>
-          <tr>
-            <td className="report-body">
-
-              {/* Bloc identité / instructions (page 1) */}
-              <div className="avoid-break mb-5">
-                <div className="grid grid-cols-2 gap-6 mb-4 text-sm">
-                  <div className="border border-gray-300 rounded-lg p-3">
-                    <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Réalisé par</p>
-                    <div className="border-b border-gray-400 h-6"></div>
-                    <p className="text-xs text-gray-400 mt-1">Nom du contrôleur</p>
-                  </div>
-                  <div className="border border-gray-300 rounded-lg p-3">
-                    <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Date du contrôle physique</p>
-                    <div className="border-b border-gray-400 h-6"></div>
-                    <p className="text-xs text-gray-400 mt-1">Jour / Mois / Année</p>
-                  </div>
+          {/* Bloc identité + instructions (page 1) */}
+          <tr className="intro-row">
+            <td colSpan={7}>
+              <div className="grid grid-cols-2 gap-6 mb-4 text-sm">
+                <div className="border border-gray-300 rounded-lg p-3">
+                  <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Réalisé par</p>
+                  <div className="border-b border-gray-400 h-6"></div>
+                  <p className="text-xs text-gray-400 mt-1">Nom du contrôleur</p>
                 </div>
-
-                <div className="bg-gray-50 border border-gray-300 rounded-lg p-3 text-sm">
-                  <p className="font-bold mb-1">Instructions</p>
-                  <ol className="list-decimal list-inside space-y-0.5 text-gray-700">
-                    <li>Peser ou compter chaque lot physiquement présent en stock.</li>
-                    <li>Reporter la quantité réelle dans la colonne <strong>« Stock physique »</strong>.</li>
-                    <li>Indiquer l&apos;<strong>écart</strong> par rapport au stock application, cocher <strong>OK</strong> si conforme.</li>
-                    <li>Consigner toute anomalie (lot endommagé, périmé, emplacement) dans <strong>« Observations »</strong>.</li>
-                    <li>Dater et signer en fin de rapport.</li>
-                  </ol>
+                <div className="border border-gray-300 rounded-lg p-3">
+                  <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Date du contrôle physique</p>
+                  <div className="border-b border-gray-400 h-6"></div>
+                  <p className="text-xs text-gray-400 mt-1">Jour / Mois / Année</p>
                 </div>
               </div>
+              <div className="bg-gray-50 border border-gray-300 rounded-lg p-3 text-sm mb-2">
+                <p className="font-bold mb-1">Instructions</p>
+                <ol className="list-decimal list-inside space-y-0.5 text-gray-700">
+                  <li>Peser ou compter chaque lot physiquement présent en stock.</li>
+                  <li>Reporter la quantité réelle dans la colonne <strong>« Stock physique »</strong>.</li>
+                  <li>Indiquer l&apos;<strong>écart</strong> par rapport au stock application, cocher <strong>OK</strong> si conforme.</li>
+                  <li>Consigner toute anomalie (lot endommagé, périmé, emplacement) dans <strong>« Observations »</strong>.</li>
+                  <li>Dater et signer en fin de rapport.</li>
+                </ol>
+              </div>
+            </td>
+          </tr>
 
-              {/* Sections par catégorie */}
-              {sections.map((section) => (
-                <div key={section.categorie} className="section-block mb-7">
-                  <h2 className="text-sm font-bold bg-gray-800 text-white px-3 py-1.5 uppercase tracking-wide">
-                    {categorieLabels[section.categorie] || section.categorie}
-                    <span className="font-normal text-gray-300 ml-2">
-                      — {section.items.length} matière(s), {section.items.reduce((s, g) => s + g.lots.length, 0)} lot(s)
-                    </span>
-                  </h2>
+          {/* Sections + matières + lots */}
+          {sections.map((section) => (
+            <Fragment key={section.categorie}>
+              <tr className="cat-row">
+                <td colSpan={7}>
+                  {categorieLabels[section.categorie] || section.categorie}
+                  <span className="muted"> — {section.items.length} matière(s), {section.items.reduce((s, g) => s + g.lots.length, 0)} lot(s)</span>
+                </td>
+              </tr>
 
-                  <table className="grille w-full border-collapse border border-gray-400">
-                    <thead>
-                      <tr className="bg-gray-100 text-[10px] uppercase text-gray-700">
-                        <th className="border border-gray-400 px-2 py-1 text-left" rowSpan={2}>Matière / N° lot</th>
-                        <th className="border border-gray-400 px-2 py-1 text-left w-[80px]" rowSpan={2}>Péremption</th>
-                        <th className="border border-gray-400 px-2 py-1 text-right w-[90px]" rowSpan={2}>
-                          {showTheorique ? 'Stock app.' : ''}
-                        </th>
-                        <th className="border border-gray-400 px-2 py-1 text-center fill-col" colSpan={4}>
-                          À compléter par le contrôleur
-                        </th>
-                      </tr>
-                      <tr className="bg-gray-100 text-[10px] uppercase text-gray-700">
-                        <th className="border border-gray-400 px-2 py-1 text-center w-[110px] fill-col">Stock physique</th>
-                        <th className="border border-gray-400 px-2 py-1 text-center w-[70px] fill-col">Écart</th>
-                        <th className="border border-gray-400 px-2 py-1 text-center w-[42px] fill-col">OK</th>
-                        <th className="border border-gray-400 px-2 py-1 text-left fill-col">Observations</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {section.items.map((group) => (
-                        <Fragment key={group.matiere_premiere_id}>
-                          {/* Ligne matière (sous-total) */}
-                          <tr className="matiere-header bg-gray-50">
-                            <td className="border border-gray-400 px-2 py-1" colSpan={2}>
-                              <span className="font-bold">{group.nom}</span>
-                              <span className="text-[10px] text-gray-500 ml-1">({group.unite})</span>
-                            </td>
-                            <td className="border border-gray-400 px-2 py-1 text-right font-bold">
-                              {showTheorique ? `${group.stock_theorique.toFixed(3)} ${group.unite}` : ''}
-                            </td>
-                            <td className="border border-gray-400 px-2 py-1 fill-col">
-                              <div className="input-physique rounded px-1">&nbsp;</div>
-                            </td>
-                            <td className="border border-gray-400 px-2 py-1 fill-col">
-                              <div className="input-ecart rounded px-1">&nbsp;</div>
-                            </td>
-                            <td className="border border-gray-400 px-2 py-1 text-center fill-col">
-                              <div className="w-4 h-4 border-2 border-gray-500 rounded mx-auto"></div>
-                            </td>
-                            <td className="border border-gray-400 px-2 py-1 fill-col"></td>
-                          </tr>
-                          {/* Lignes lots */}
-                          {group.lots.map((lot) => (
-                            <tr key={lot.id} className="lot-row">
-                              <td className="border border-gray-400 px-2 py-1 pl-6 text-[11px]">
-                                <span className="font-mono">{lot.numero_lot}</span>
-                              </td>
-                              <td className="border border-gray-400 px-2 py-1 text-[11px] text-gray-600">
-                                {lot.date_peremption}
-                              </td>
-                              <td className="border border-gray-400 px-2 py-1 text-[11px] text-right">
-                                {showTheorique ? `${lot.quantite_restante} ${group.unite}` : ''}
-                              </td>
-                              <td className="border border-gray-400 px-2 py-1 fill-col">
-                                <div className="input-physique rounded px-1">&nbsp;</div>
-                              </td>
-                              <td className="border border-gray-400 px-2 py-1 fill-col">
-                                <div className="input-ecart rounded px-1">&nbsp;</div>
-                              </td>
-                              <td className="border border-gray-400 px-2 py-1 text-center fill-col">
-                                <div className="w-3.5 h-3.5 border-2 border-gray-500 rounded mx-auto"></div>
-                              </td>
-                              <td className="border border-gray-400 px-2 py-1 fill-col">
-                                <div className="border-b border-gray-300 min-h-[16px]"></div>
-                              </td>
-                            </tr>
-                          ))}
-                        </Fragment>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+              {section.items.map((group) => (
+                <Fragment key={group.matiere_premiere_id}>
+                  {/* Ligne matière (sous-total) */}
+                  <tr className="matiere-row">
+                    <td className="gcell" colSpan={2}>
+                      <span className="font-bold">{group.nom}</span>
+                      <span className="text-[10px] text-gray-500 ml-1">({group.unite})</span>
+                    </td>
+                    <td className="gcell text-right font-bold">
+                      {showTheorique ? `${group.stock_theorique.toFixed(3)} ${group.unite}` : ''}
+                    </td>
+                    <td className="gcell fill-col">{emptyBox}</td>
+                    <td className="gcell fill-col">{emptyEcart}</td>
+                    <td className="gcell fill-col text-center">{checkbox()}</td>
+                    <td className="gcell fill-col"></td>
+                  </tr>
+                  {/* Lignes lots */}
+                  {group.lots.map((lot) => (
+                    <tr key={lot.id} className="lot-row">
+                      <td className="gcell pl-6 text-[11px]">
+                        <span className="font-mono">{lot.numero_lot}</span>
+                      </td>
+                      <td className="gcell text-[11px] text-gray-600">{lot.date_peremption}</td>
+                      <td className="gcell text-[11px] text-right">
+                        {showTheorique ? `${lot.quantite_restante} ${group.unite}` : ''}
+                      </td>
+                      <td className="gcell fill-col">{emptyBox}</td>
+                      <td className="gcell fill-col">{emptyEcart}</td>
+                      <td className="gcell fill-col text-center">{checkbox(true)}</td>
+                      <td className="gcell fill-col">
+                        <div className="border-b border-gray-300 min-h-[16px]"></div>
+                      </td>
+                    </tr>
+                  ))}
+                </Fragment>
               ))}
+            </Fragment>
+          ))}
 
-              {sections.length === 0 && (
-                <p className="text-gray-400 text-center py-8">Aucun lot en stock à inventorier.</p>
-              )}
+          {sections.length === 0 && (
+            <tr><td colSpan={7} className="text-center text-gray-400 py-8">Aucun lot en stock à inventorier.</td></tr>
+          )}
 
-              {/* Synthèse + signatures */}
-              <div className="avoid-break mt-8 border-t-2 border-gray-800 pt-4">
+          {/* Synthèse + signatures */}
+          <tr className="sign-row">
+            <td colSpan={7}>
+              <div className="border-t-2 border-gray-800 pt-4">
                 <div className="grid grid-cols-3 gap-6 text-sm">
                   <div>
                     <p className="font-bold mb-1">Synthèse</p>
@@ -329,7 +317,6 @@ export default function InventairePage() {
                   </div>
                 </div>
               </div>
-
             </td>
           </tr>
         </tbody>

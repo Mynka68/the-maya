@@ -21,25 +21,35 @@ body {
 
 /* ============================================================
    Rapport d'inventaire — mise en page impression
-   (CSS global, non transformé, pour garantir les boîtes @page)
+   Table unique : le <thead> (bandeau + en-têtes de colonnes) se
+   répète sur chaque page ; les données sont de vraies lignes tbody.
    ============================================================ */
-.report-shell { width: 100%; border-collapse: collapse; }
+.report { width: 100%; border-collapse: collapse; }
+.report th, .report td { vertical-align: top; }
+.gcell { border: 1px solid #9ca3af; padding: 4px 6px; }
+
 .report-band {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 16px;
-  border-bottom: 2.5px solid #14532d;
-  padding-bottom: 6px;
+  display: flex; align-items: flex-end; justify-content: space-between;
+  gap: 16px; border-bottom: 2.5px solid #14532d; padding-bottom: 6px;
 }
-.report-band-left { line-height: 1.2; }
-.report-band-title { font-size: 15px; font-weight: 800; letter-spacing: 0.02em; color: #14532d; }
+.report-band-title { font-size: 15px; font-weight: 800; letter-spacing: .02em; color: #14532d; }
 .report-band-sub { font-size: 10px; color: #4b5563; margin-top: 2px; }
 .report-band-right { text-align: right; font-size: 10px; color: #374151; line-height: 1.5; white-space: nowrap; }
 .report-band-right strong { color: #111827; }
+.band-cell { border: none; padding: 0 0 8px 0; }
+
+.colhead th { border: 1px solid #9ca3af; background: #f3f4f6; font-size: 10px;
+  text-transform: uppercase; letter-spacing: .02em; color: #374151; padding: 4px 6px; }
+
+.cat-row td { background: #1f2937; color: #fff; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .03em; padding: 5px 8px; font-size: 12px; }
+.cat-row td .muted { color: #9ca3af; font-weight: 400; text-transform: none; }
+.matiere-row td { background: #f9fafb; }
+.intro-row > td, .sign-row > td { border: none; padding: 14px 0 0; }
+.fill-col { background: #fcfcf7; }
 
 @media screen {
-  .report-band { margin-bottom: 20px; }
+  .report-band { margin-bottom: 4px; }
   .input-physique, .input-ecart { pointer-events: none; }
 }
 
@@ -63,25 +73,15 @@ body {
   main { margin: 0 !important; padding: 0 !important; }
   html, body { background: #fff !important; }
   body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  .report-shell { font-size: 10px; }
 
-  /* La table-enveloppe : son thead (le bandeau) se répète sur chaque page */
-  .report-shell > thead { display: table-header-group; }
-  .report-shell > thead td { padding: 0 0 6px 0; }
-  .report-band { margin: 0; }
-  .report-body { padding-top: 10px; }
-
-  table.grille { font-size: 9px; }
-  table.grille thead { display: table-header-group; }
-  .report-body tr { break-inside: avoid; page-break-inside: avoid; }
-  .report-body h2 { break-after: avoid; break-inside: avoid; }
-  .matiere-header { break-after: avoid; }
-  .avoid-break { break-inside: avoid; }
-  .section-block { break-inside: auto; }
-  .lot-row td { padding: 3px 6px !important; }
-  .matiere-header td { padding: 4px 6px !important; }
+  .report { font-size: 9px; }
+  .report thead { display: table-header-group; }
+  .report tr { break-inside: avoid; page-break-inside: avoid; }
+  .cat-row, .matiere-row { break-after: avoid; }
+  .intro-row > td, .sign-row > td { break-inside: avoid; }
+  .gcell { padding: 3px 6px; }
 
   .input-physique { border: 1px solid #9ca3af !important; min-width: 78px; height: 20px; background: #fff !important; }
   .input-ecart { border: 1px solid #9ca3af !important; min-width: 52px; height: 20px; background: #fff !important; }
-  .fill-col { background: #fbfbf7 !important; }
+  .fill-col { background: #fbfbf5 !important; }
 }
