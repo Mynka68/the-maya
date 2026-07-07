@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Fragment } from 'react'
 import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
 
@@ -23,8 +23,8 @@ interface MatiereGroup {
 }
 
 const categorieLabels: Record<string, string> = {
-  the: 'The',
-  ingredient: 'Ingredient',
+  the: 'Thé',
+  ingredient: 'Ingrédient',
   emballage: 'Emballage',
 }
 
@@ -82,7 +82,7 @@ export default function InventairePage() {
     ? groups.filter(g => g.categorie === filterCategorie)
     : groups
 
-  // Group by categorie for section headers
+  // Regroupement par catégorie pour les sous-titres de section
   const sections: { categorie: string; items: MatiereGroup[] }[] = []
   let currentCat = ''
   for (const g of filtered) {
@@ -93,52 +93,27 @@ export default function InventairePage() {
     sections[sections.length - 1].items.push(g)
   }
 
+  const totalMatieres = filtered.length
+  const totalLots = filtered.reduce((s, g) => s + g.lots.length, 0)
+  const perimetre = filterCategorie ? (categorieLabels[filterCategorie] || filterCategorie) : 'Toutes catégories'
+
   if (loading) return <p className="text-gray-500 p-6">Chargement...</p>
 
   return (
     <>
-      <style jsx global>{`
-        @media print {
-          .no-print { display: none !important; }
-          aside { display: none !important; }
-          main { margin-left: 0 !important; padding: 0 !important; }
-          body { font-size: 11px; }
-          #rapport-inventaire { padding: 10px; }
-          .page-break { page-break-before: always; }
-          table { font-size: 10px; }
-          .lot-row td { padding: 4px 8px !important; }
-          .matiere-header { padding: 6px 8px !important; }
-          .input-physique {
-            border: 1px solid #999 !important;
-            min-width: 80px;
-            height: 24px;
-            background: #fafafa !important;
-          }
-          .input-ecart {
-            border: 1px solid #999 !important;
-            min-width: 60px;
-            height: 24px;
-            background: #fafafa !important;
-          }
-        }
-        @media screen {
-          .input-physique, .input-ecart { pointer-events: none; }
-        }
-      `}</style>
-
-      {/* Toolbar */}
+      {/* Barre d'outils (jamais imprimée) */}
       <div className="no-print mb-6">
         <div className="flex justify-between items-center mb-4">
           <div>
             <h1 className="text-2xl font-bold text-primary-dark">Rapport d&apos;inventaire</h1>
-            <p className="text-sm text-gray-500 mt-1">Imprimez ce rapport pour que votre technicien verifie le stock physique</p>
+            <p className="text-sm text-gray-500 mt-1">Imprimez ce rapport pour le contrôle physique du stock (en-tête et pagination sur chaque page)</p>
           </div>
           <div className="flex gap-3">
             <button
               onClick={() => window.print()}
               className="bg-primary text-white px-6 py-2 rounded-lg hover:bg-primary-light transition"
             >
-              Imprimer le rapport
+              🖨️ Imprimer le rapport
             </button>
             <Link href="/stocks" className="bg-gray-200 px-4 py-2 rounded-lg hover:bg-gray-300">
               Retour aux stocks
@@ -148,185 +123,217 @@ export default function InventairePage() {
 
         <div className="bg-card rounded-lg shadow p-4 flex flex-wrap gap-4 items-end">
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Filtrer par categorie</label>
+            <label className="block text-xs text-gray-500 mb-1">Filtrer par catégorie</label>
             <select value={filterCategorie} onChange={(e) => setFilterCategorie(e.target.value)} className="border rounded-lg px-3 py-2 text-sm">
-              <option value="">Toutes les categories</option>
-              <option value="the">The</option>
-              <option value="ingredient">Ingredient</option>
+              <option value="">Toutes les catégories</option>
+              <option value="the">Thé</option>
+              <option value="ingredient">Ingrédient</option>
               <option value="emballage">Emballage</option>
             </select>
           </div>
           <div className="flex items-center gap-2">
             <input type="checkbox" id="showTheo" checked={showTheorique} onChange={(e) => setShowTheorique(e.target.checked)} className="rounded" />
-            <label htmlFor="showTheo" className="text-sm text-gray-700">Afficher les quantites theoriques</label>
+            <label htmlFor="showTheo" className="text-sm text-gray-700">Afficher le stock théorique (application)</label>
           </div>
           <div className="text-sm text-gray-500">
-            {filtered.length} matiere(s) — {filtered.reduce((s, g) => s + g.lots.length, 0)} lot(s)
+            {totalMatieres} matière(s) — {totalLots} lot(s)
           </div>
         </div>
       </div>
 
-      {/* Rapport */}
-      <div id="rapport-inventaire">
-        {/* En-tete du rapport */}
-        <div className="border-b-2 border-gray-800 pb-4 mb-6">
-          <div className="flex justify-between items-start">
-            <div>
-              <h1 className="text-xl font-bold">RAPPORT D&apos;INVENTAIRE</h1>
-              <p className="text-sm text-gray-600">The Maya — Controle des stocks</p>
-            </div>
-            <div className="text-right text-sm">
-              <p><strong>Date :</strong> {rapportDate}</p>
-              <p className="mt-2"><strong>Realise par :</strong> _______________________</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Instructions */}
-        <div className="bg-gray-50 border rounded-lg p-4 mb-6 text-sm">
-          <p className="font-bold mb-2">Instructions :</p>
-          <ol className="list-decimal list-inside space-y-1 text-gray-700">
-            <li>Verifier chaque lot physiquement en stock</li>
-            <li>Peser ou compter la quantite reelle et la noter dans la colonne <strong>&quot;Stock physique&quot;</strong></li>
-            <li>Calculer l&apos;ecart si different et le noter dans la colonne <strong>&quot;Ecart&quot;</strong></li>
-            <li>Cocher <strong>OK</strong> si le stock correspond, ou noter l&apos;ecart</li>
-            <li>Ajouter des observations si necessaire (lot endommage, emplacement incorrect, etc.)</li>
-          </ol>
-        </div>
-
-        {/* Tableau par section */}
-        {sections.map((section, sIdx) => (
-          <div key={section.categorie} className={sIdx > 0 ? 'mt-8' : ''}>
-            <h2 className="text-lg font-bold bg-gray-200 px-4 py-2 rounded-t-lg uppercase">
-              {categorieLabels[section.categorie] || section.categorie}
-              <span className="text-sm font-normal text-gray-600 ml-2">
-                ({section.items.length} matiere(s), {section.items.reduce((s, g) => s + g.lots.length, 0)} lot(s))
-              </span>
-            </h2>
-
-            <table className="w-full border-collapse border border-gray-300">
-              <thead>
-                <tr className="bg-gray-100 text-xs uppercase">
-                  <th className="border border-gray-300 px-3 py-2 text-left w-[200px]">Matiere / N lot</th>
-                  <th className="border border-gray-300 px-3 py-2 text-left w-[90px]">Peremption</th>
-                  <th className="border border-gray-300 px-3 py-2 text-right w-[100px]">
-                    {showTheorique ? 'Stock app' : ''}
-                  </th>
-                  <th className="border border-gray-300 px-3 py-2 text-center w-[120px] bg-yellow-50">Stock physique</th>
-                  <th className="border border-gray-300 px-3 py-2 text-center w-[80px] bg-yellow-50">Ecart</th>
-                  <th className="border border-gray-300 px-3 py-2 text-center w-[50px] bg-yellow-50">OK</th>
-                  <th className="border border-gray-300 px-3 py-2 text-left bg-yellow-50">Observations</th>
-                </tr>
-              </thead>
-              <tbody>
-                {section.items.map((group) => (
-                  <>
-                    {/* Ligne matiere premiere (header) */}
-                    <tr key={group.matiere_premiere_id} className="bg-gray-50">
-                      <td className="border border-gray-300 px-3 py-2 matiere-header" colSpan={2}>
-                        <span className="font-bold">{group.nom}</span>
-                        <span className="text-xs text-gray-500 ml-2">({group.unite})</span>
-                      </td>
-                      <td className="border border-gray-300 px-3 py-2 text-right font-bold matiere-header">
-                        {showTheorique ? `${group.stock_theorique.toFixed(3)} ${group.unite}` : ''}
-                      </td>
-                      <td className="border border-gray-300 px-3 py-2 bg-yellow-50/50 matiere-header">
-                        <div className="input-physique rounded px-1">&nbsp;</div>
-                      </td>
-                      <td className="border border-gray-300 px-3 py-2 bg-yellow-50/50 matiere-header">
-                        <div className="input-ecart rounded px-1">&nbsp;</div>
-                      </td>
-                      <td className="border border-gray-300 px-3 py-2 text-center bg-yellow-50/50 matiere-header">
-                        <div className="w-5 h-5 border-2 border-gray-400 rounded mx-auto"></div>
-                      </td>
-                      <td className="border border-gray-300 px-3 py-2 bg-yellow-50/50 matiere-header"></td>
-                    </tr>
-                    {/* Lignes lots */}
-                    {group.lots.map((lot) => (
-                      <tr key={lot.id} className="lot-row">
-                        <td className="border border-gray-300 px-3 py-1.5 pl-8 text-sm">
-                          <span className="font-mono">{lot.numero_lot}</span>
-                        </td>
-                        <td className="border border-gray-300 px-3 py-1.5 text-sm text-gray-600">
-                          {lot.date_peremption}
-                        </td>
-                        <td className="border border-gray-300 px-3 py-1.5 text-sm text-right">
-                          {showTheorique ? `${lot.quantite_restante} ${group.unite}` : ''}
-                        </td>
-                        <td className="border border-gray-300 px-3 py-1.5 bg-yellow-50/30">
-                          <div className="input-physique rounded px-1">&nbsp;</div>
-                        </td>
-                        <td className="border border-gray-300 px-3 py-1.5 bg-yellow-50/30">
-                          <div className="input-ecart rounded px-1">&nbsp;</div>
-                        </td>
-                        <td className="border border-gray-300 px-3 py-1.5 text-center bg-yellow-50/30">
-                          <div className="w-4 h-4 border-2 border-gray-400 rounded mx-auto"></div>
-                        </td>
-                        <td className="border border-gray-300 px-3 py-1.5 bg-yellow-50/30">
-                          <div className="border-b border-gray-300 min-h-[18px]"></div>
-                        </td>
-                      </tr>
-                    ))}
-                  </>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ))}
-
-        {/* Resume */}
-        <div className="mt-8 border-t-2 border-gray-800 pt-4">
-          <div className="grid grid-cols-3 gap-6 text-sm">
-            <div>
-              <p className="font-bold mb-1">Resume</p>
-              <p>Matieres controlees : {filtered.length}</p>
-              <p>Lots controles : {filtered.reduce((s, g) => s + g.lots.length, 0)}</p>
-            </div>
-            <div>
-              <p className="font-bold mb-1">Resultat global</p>
-              <div className="flex gap-6 mt-2">
-                <label className="flex items-center gap-2">
-                  <div className="w-5 h-5 border-2 border-gray-400 rounded"></div>
-                  <span>Conforme</span>
-                </label>
-                <label className="flex items-center gap-2">
-                  <div className="w-5 h-5 border-2 border-gray-400 rounded"></div>
-                  <span>Ecarts constates</span>
-                </label>
+      {/* Rapport : table-enveloppe pour répéter le bandeau sur chaque page imprimée */}
+      <table className="report-shell" id="rapport-inventaire">
+        <thead>
+          <tr>
+            <td>
+              <div className="report-band">
+                <div className="report-band-left">
+                  <div className="report-band-title">🍵 THÉ MAYA — RAPPORT D&apos;INVENTAIRE</div>
+                  <div className="report-band-sub">Contrôle physique des stocks de matières premières</div>
+                </div>
+                <div className="report-band-right">
+                  <div><strong>Date :</strong> {rapportDate}</div>
+                  <div><strong>Périmètre :</strong> {perimetre}</div>
+                  <div>{totalMatieres} matière(s) · {totalLots} lot(s)</div>
+                </div>
               </div>
-            </div>
-            <div>
-              <p className="font-bold mb-1">Nombre d&apos;ecarts</p>
-              <div className="border-b border-gray-400 w-24 h-6 mt-1"></div>
-            </div>
-          </div>
-        </div>
+            </td>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td className="report-body">
 
-        {/* Observations generales */}
-        <div className="mt-6">
-          <p className="font-bold text-sm mb-2">Observations generales :</p>
-          <div className="border border-gray-300 rounded-lg min-h-[100px] p-2">
-            <div className="border-b border-gray-200 h-6"></div>
-            <div className="border-b border-gray-200 h-6"></div>
-            <div className="border-b border-gray-200 h-6"></div>
-            <div className="h-6"></div>
-          </div>
-        </div>
+              {/* Bloc identité / instructions (page 1) */}
+              <div className="avoid-break mb-5">
+                <div className="grid grid-cols-2 gap-6 mb-4 text-sm">
+                  <div className="border border-gray-300 rounded-lg p-3">
+                    <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Réalisé par</p>
+                    <div className="border-b border-gray-400 h-6"></div>
+                    <p className="text-xs text-gray-400 mt-1">Nom du contrôleur</p>
+                  </div>
+                  <div className="border border-gray-300 rounded-lg p-3">
+                    <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Date du contrôle physique</p>
+                    <div className="border-b border-gray-400 h-6"></div>
+                    <p className="text-xs text-gray-400 mt-1">Jour / Mois / Année</p>
+                  </div>
+                </div>
 
-        {/* Signatures */}
-        <div className="mt-8 grid grid-cols-2 gap-8">
-          <div>
-            <p className="text-sm font-bold mb-1">Technicien</p>
-            <div className="border-b border-gray-400 h-16"></div>
-            <p className="text-xs text-gray-400 mt-1">Nom / Signature / Date</p>
-          </div>
-          <div>
-            <p className="text-sm font-bold mb-1">Responsable</p>
-            <div className="border-b border-gray-400 h-16"></div>
-            <p className="text-xs text-gray-400 mt-1">Nom / Signature / Date</p>
-          </div>
-        </div>
-      </div>
+                <div className="bg-gray-50 border border-gray-300 rounded-lg p-3 text-sm">
+                  <p className="font-bold mb-1">Instructions</p>
+                  <ol className="list-decimal list-inside space-y-0.5 text-gray-700">
+                    <li>Peser ou compter chaque lot physiquement présent en stock.</li>
+                    <li>Reporter la quantité réelle dans la colonne <strong>« Stock physique »</strong>.</li>
+                    <li>Indiquer l&apos;<strong>écart</strong> par rapport au stock application, cocher <strong>OK</strong> si conforme.</li>
+                    <li>Consigner toute anomalie (lot endommagé, périmé, emplacement) dans <strong>« Observations »</strong>.</li>
+                    <li>Dater et signer en fin de rapport.</li>
+                  </ol>
+                </div>
+              </div>
+
+              {/* Sections par catégorie */}
+              {sections.map((section) => (
+                <div key={section.categorie} className="section-block mb-7">
+                  <h2 className="text-sm font-bold bg-gray-800 text-white px-3 py-1.5 uppercase tracking-wide">
+                    {categorieLabels[section.categorie] || section.categorie}
+                    <span className="font-normal text-gray-300 ml-2">
+                      — {section.items.length} matière(s), {section.items.reduce((s, g) => s + g.lots.length, 0)} lot(s)
+                    </span>
+                  </h2>
+
+                  <table className="grille w-full border-collapse border border-gray-400">
+                    <thead>
+                      <tr className="bg-gray-100 text-[10px] uppercase text-gray-700">
+                        <th className="border border-gray-400 px-2 py-1 text-left" rowSpan={2}>Matière / N° lot</th>
+                        <th className="border border-gray-400 px-2 py-1 text-left w-[80px]" rowSpan={2}>Péremption</th>
+                        <th className="border border-gray-400 px-2 py-1 text-right w-[90px]" rowSpan={2}>
+                          {showTheorique ? 'Stock app.' : ''}
+                        </th>
+                        <th className="border border-gray-400 px-2 py-1 text-center fill-col" colSpan={4}>
+                          À compléter par le contrôleur
+                        </th>
+                      </tr>
+                      <tr className="bg-gray-100 text-[10px] uppercase text-gray-700">
+                        <th className="border border-gray-400 px-2 py-1 text-center w-[110px] fill-col">Stock physique</th>
+                        <th className="border border-gray-400 px-2 py-1 text-center w-[70px] fill-col">Écart</th>
+                        <th className="border border-gray-400 px-2 py-1 text-center w-[42px] fill-col">OK</th>
+                        <th className="border border-gray-400 px-2 py-1 text-left fill-col">Observations</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {section.items.map((group) => (
+                        <Fragment key={group.matiere_premiere_id}>
+                          {/* Ligne matière (sous-total) */}
+                          <tr className="matiere-header bg-gray-50">
+                            <td className="border border-gray-400 px-2 py-1" colSpan={2}>
+                              <span className="font-bold">{group.nom}</span>
+                              <span className="text-[10px] text-gray-500 ml-1">({group.unite})</span>
+                            </td>
+                            <td className="border border-gray-400 px-2 py-1 text-right font-bold">
+                              {showTheorique ? `${group.stock_theorique.toFixed(3)} ${group.unite}` : ''}
+                            </td>
+                            <td className="border border-gray-400 px-2 py-1 fill-col">
+                              <div className="input-physique rounded px-1">&nbsp;</div>
+                            </td>
+                            <td className="border border-gray-400 px-2 py-1 fill-col">
+                              <div className="input-ecart rounded px-1">&nbsp;</div>
+                            </td>
+                            <td className="border border-gray-400 px-2 py-1 text-center fill-col">
+                              <div className="w-4 h-4 border-2 border-gray-500 rounded mx-auto"></div>
+                            </td>
+                            <td className="border border-gray-400 px-2 py-1 fill-col"></td>
+                          </tr>
+                          {/* Lignes lots */}
+                          {group.lots.map((lot) => (
+                            <tr key={lot.id} className="lot-row">
+                              <td className="border border-gray-400 px-2 py-1 pl-6 text-[11px]">
+                                <span className="font-mono">{lot.numero_lot}</span>
+                              </td>
+                              <td className="border border-gray-400 px-2 py-1 text-[11px] text-gray-600">
+                                {lot.date_peremption}
+                              </td>
+                              <td className="border border-gray-400 px-2 py-1 text-[11px] text-right">
+                                {showTheorique ? `${lot.quantite_restante} ${group.unite}` : ''}
+                              </td>
+                              <td className="border border-gray-400 px-2 py-1 fill-col">
+                                <div className="input-physique rounded px-1">&nbsp;</div>
+                              </td>
+                              <td className="border border-gray-400 px-2 py-1 fill-col">
+                                <div className="input-ecart rounded px-1">&nbsp;</div>
+                              </td>
+                              <td className="border border-gray-400 px-2 py-1 text-center fill-col">
+                                <div className="w-3.5 h-3.5 border-2 border-gray-500 rounded mx-auto"></div>
+                              </td>
+                              <td className="border border-gray-400 px-2 py-1 fill-col">
+                                <div className="border-b border-gray-300 min-h-[16px]"></div>
+                              </td>
+                            </tr>
+                          ))}
+                        </Fragment>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ))}
+
+              {sections.length === 0 && (
+                <p className="text-gray-400 text-center py-8">Aucun lot en stock à inventorier.</p>
+              )}
+
+              {/* Synthèse + signatures */}
+              <div className="avoid-break mt-8 border-t-2 border-gray-800 pt-4">
+                <div className="grid grid-cols-3 gap-6 text-sm">
+                  <div>
+                    <p className="font-bold mb-1">Synthèse</p>
+                    <p>Matières contrôlées : {totalMatieres}</p>
+                    <p>Lots contrôlés : {totalLots}</p>
+                  </div>
+                  <div>
+                    <p className="font-bold mb-1">Résultat global</p>
+                    <div className="flex flex-col gap-1 mt-1">
+                      <label className="flex items-center gap-2">
+                        <div className="w-4 h-4 border-2 border-gray-500 rounded"></div>
+                        <span>Conforme (aucun écart)</span>
+                      </label>
+                      <label className="flex items-center gap-2">
+                        <div className="w-4 h-4 border-2 border-gray-500 rounded"></div>
+                        <span>Écarts constatés</span>
+                      </label>
+                    </div>
+                  </div>
+                  <div>
+                    <p className="font-bold mb-1">Nombre d&apos;écarts constatés</p>
+                    <div className="border-b border-gray-500 w-28 h-6 mt-1"></div>
+                  </div>
+                </div>
+
+                <div className="mt-5">
+                  <p className="font-bold text-sm mb-2">Observations générales</p>
+                  <div className="border border-gray-300 rounded-lg p-2">
+                    <div className="border-b border-gray-200 h-5"></div>
+                    <div className="border-b border-gray-200 h-5"></div>
+                    <div className="h-5"></div>
+                  </div>
+                </div>
+
+                <div className="mt-6 grid grid-cols-2 gap-8">
+                  <div>
+                    <p className="text-sm font-bold mb-1">Contrôleur</p>
+                    <div className="border-b border-gray-500 h-14"></div>
+                    <p className="text-xs text-gray-400 mt-1">Nom / Signature / Date</p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold mb-1">Responsable</p>
+                    <div className="border-b border-gray-500 h-14"></div>
+                    <p className="text-xs text-gray-400 mt-1">Nom / Signature / Date</p>
+                  </div>
+                </div>
+              </div>
+
+            </td>
+          </tr>
+        </tbody>
+      </table>
     </>
   )
 }
