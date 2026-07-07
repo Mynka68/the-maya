@@ -45,7 +45,8 @@ body {
   letter-spacing: .03em; padding: 5px 8px; font-size: 12px; }
 .cat-row td .muted { color: #9ca3af; font-weight: 400; text-transform: none; }
 .matiere-row td { background: #f9fafb; }
-.intro-row > td, .sign-row > td { border: none; padding: 14px 0 0; }
+.sign-row > td { border: none; padding: 14px 0 0; }
+.intro-preamble { margin-bottom: 14px; }
 .fill-col { background: #fcfcf7; }
 
 @media screen {
@@ -78,7 +79,7 @@ body {
   .report thead { display: table-header-group; }
   .report tr { break-inside: avoid; page-break-inside: avoid; }
   .cat-row, .matiere-row { break-after: avoid; }
-  .intro-row > td, .sign-row > td { break-inside: avoid; }
+  .intro-preamble, .sign-row > td { break-inside: avoid; }
   .gcell { padding: 3px 6px; }
 
   .input-physique { border: 1px solid #9ca3af !important; min-width: 78px; height: 20px; background: #fff !important; }

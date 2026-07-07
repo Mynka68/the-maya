@@ -150,6 +150,32 @@ export default function InventairePage() {
         </div>
       </div>
 
+      {/* Bloc identité + instructions — au-dessus du tableau (page 1 uniquement) */}
+      <div className="intro-preamble">
+        <div className="grid grid-cols-2 gap-6 mb-4 text-sm">
+          <div className="border border-gray-300 rounded-lg p-3">
+            <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Réalisé par</p>
+            <div className="border-b border-gray-400 h-6"></div>
+            <p className="text-xs text-gray-400 mt-1">Nom du contrôleur</p>
+          </div>
+          <div className="border border-gray-300 rounded-lg p-3">
+            <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Date du contrôle physique</p>
+            <div className="border-b border-gray-400 h-6"></div>
+            <p className="text-xs text-gray-400 mt-1">Jour / Mois / Année</p>
+          </div>
+        </div>
+        <div className="bg-gray-50 border border-gray-300 rounded-lg p-3 text-sm">
+          <p className="font-bold mb-1">Instructions</p>
+          <ol className="list-decimal list-inside space-y-0.5 text-gray-700">
+            <li>Peser ou compter chaque lot physiquement présent en stock.</li>
+            <li>Reporter la quantité réelle dans la colonne <strong>« Stock physique »</strong>.</li>
+            <li>Indiquer l&apos;<strong>écart</strong> par rapport au stock application, cocher <strong>OK</strong> si conforme.</li>
+            <li>Consigner toute anomalie (lot endommagé, périmé, emplacement) dans <strong>« Observations »</strong>.</li>
+            <li>Dater et signer en fin de rapport.</li>
+          </ol>
+        </div>
+      </div>
+
       {/* Rapport : une seule table, le thead (bandeau + colonnes) se répète sur chaque page */}
       <table className="report" id="rapport-inventaire">
         <thead>
@@ -185,34 +211,6 @@ export default function InventairePage() {
         </thead>
 
         <tbody>
-          {/* Bloc identité + instructions (page 1) */}
-          <tr className="intro-row">
-            <td colSpan={7}>
-              <div className="grid grid-cols-2 gap-6 mb-4 text-sm">
-                <div className="border border-gray-300 rounded-lg p-3">
-                  <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Réalisé par</p>
-                  <div className="border-b border-gray-400 h-6"></div>
-                  <p className="text-xs text-gray-400 mt-1">Nom du contrôleur</p>
-                </div>
-                <div className="border border-gray-300 rounded-lg p-3">
-                  <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Date du contrôle physique</p>
-                  <div className="border-b border-gray-400 h-6"></div>
-                  <p className="text-xs text-gray-400 mt-1">Jour / Mois / Année</p>
-                </div>
-              </div>
-              <div className="bg-gray-50 border border-gray-300 rounded-lg p-3 text-sm mb-2">
-                <p className="font-bold mb-1">Instructions</p>
-                <ol className="list-decimal list-inside space-y-0.5 text-gray-700">
-                  <li>Peser ou compter chaque lot physiquement présent en stock.</li>
-                  <li>Reporter la quantité réelle dans la colonne <strong>« Stock physique »</strong>.</li>
-                  <li>Indiquer l&apos;<strong>écart</strong> par rapport au stock application, cocher <strong>OK</strong> si conforme.</li>
-                  <li>Consigner toute anomalie (lot endommagé, périmé, emplacement) dans <strong>« Observations »</strong>.</li>
-                  <li>Dater et signer en fin de rapport.</li>
-                </ol>
-              </div>
-            </td>
-          </tr>
-
           {/* Sections + matières + lots */}
           {sections.map((section) => (
             <Fragment key={section.categorie}>
