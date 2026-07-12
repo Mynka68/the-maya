@@ -9,6 +9,8 @@ const HUB_SUPABASE_URL = 'https://qlxnzqrofvueyncdbuoc.supabase.co'
 const HUB_ANON =
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFseG56cXJvZnZ1ZXluY2RidW9jIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTU5MzY2NzcsImV4cCI6MjA3MTUxMjY3N30.9Ww8CoahszeCGnHzkHr0jRwCjfccv0otD7fAguQd07A'
 const COOKIE_DOMAIN = '.apps.mynoa.fr'
+// Clé de CETTE application dans les droits hub_members.apps ('*' = tout).
+const APP_KEY = 'production'
 
 function isLocal(host: string): boolean {
   return host.startsWith('localhost') || host.startsWith('127.0.0.1')
@@ -49,9 +51,10 @@ export async function ssoGate(req: NextRequest, appUrl: string): Promise<NextRes
     if (aal?.currentLevel === 'aal2') {
       const { data: member } = await supabase
         .from('hub_members')
-        .select('email')
+        .select('is_admin,apps')
         .maybeSingle()
-      ok = !!member
+      const apps: string[] = Array.isArray(member?.apps) ? member.apps : ['*']
+      ok = !!member && (member.is_admin || apps.includes('*') || apps.includes(APP_KEY))
     }
   }
   if (ok) return res
