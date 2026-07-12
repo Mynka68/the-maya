@@ -1,24 +1,20 @@
 'use client'
 
 import { useAuth } from '@/contexts/AuthContext'
-import { usePathname, useRouter } from 'next/navigation'
 import { useEffect } from 'react'
 import Sidebar from './Sidebar'
 
 export default function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth()
-  const pathname = usePathname()
-  const router = useRouter()
 
   useEffect(() => {
-    if (!loading && !user && pathname !== '/login') {
-      router.replace('/login')
+    // Filet client : si pas de session partagée, retour au Hub (le middleware l'a déjà
+    // normalement bloqué côté serveur).
+    if (!loading && !user) {
+      window.location.href =
+        'https://hub.apps.mynoa.fr/?next=' + encodeURIComponent(window.location.href)
     }
-  }, [loading, user, pathname, router])
-
-  if (pathname === '/login') {
-    return <>{children}</>
-  }
+  }, [loading, user])
 
   if (loading) {
     return (

@@ -56,9 +56,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   async function signOut() {
+    // Déconnexion globale (session unique du Hub) puis retour au Hub.
     await supabase.auth.signOut()
     setUser(null)
     setIsAdmin(false)
+    window.location.href = 'https://hub.apps.mynoa.fr'
   }
 
   return (
