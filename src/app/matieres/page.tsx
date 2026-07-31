@@ -11,6 +11,7 @@ interface Matiere {
   categorie: 'the' | 'ingredient' | 'emballage'
   unite: string
   description: string | null
+  prix_achat: number | null
 }
 
 const categorieLabels: Record<string, string> = {
@@ -33,7 +34,7 @@ export default function MatieresPage() {
   const [editId, setEditId] = useState<string | null>(null)
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [docCounts, setDocCounts] = useState<Record<string, number>>({})
-  const [form, setForm] = useState({ nom: '', categorie: 'the' as string, unite: 'kg', description: '' })
+  const [form, setForm] = useState({ nom: '', categorie: 'the' as string, unite: 'kg', description: '', prix_achat: '' })
 
   useEffect(() => { load() }, [])
 
@@ -60,19 +61,28 @@ export default function MatieresPage() {
 
   async function save() {
     if (!form.nom.trim()) return
-    if (editId) {
-      await supabase.from('matieres_premieres').update(form).eq('id', editId)
-    } else {
-      await supabase.from('matieres_premieres').insert(form)
+    const payload = {
+      nom: form.nom,
+      categorie: form.categorie,
+      unite: form.unite,
+      description: form.description || null,
+      prix_achat: form.prix_achat !== '' && !isNaN(parseFloat(form.prix_achat)) ? parseFloat(form.prix_achat) : null,
+    }
+    const { error } = editId
+      ? await supabase.from('matieres_premieres').update(payload).eq('id', editId)
+      : await supabase.from('matieres_premieres').insert(payload)
+    if (error) {
+      toast('error', `Erreur : ${error.message}`)
+      return
     }
     setShowForm(false)
     setEditId(null)
-    setForm({ nom: '', categorie: 'the', unite: 'kg', description: '' })
+    setForm({ nom: '', categorie: 'the', unite: 'kg', description: '', prix_achat: '' })
     load()
   }
 
   function edit(m: Matiere) {
-    setForm({ nom: m.nom, categorie: m.categorie, unite: m.unite, description: m.description || '' })
+    setForm({ nom: m.nom, categorie: m.categorie, unite: m.unite, description: m.description || '', prix_achat: m.prix_achat != null ? String(m.prix_achat) : '' })
     setEditId(m.id)
     setShowForm(true)
   }
@@ -103,7 +113,7 @@ export default function MatieresPage() {
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold text-primary-dark">Matières premières</h1>
         <button
-          onClick={() => { setShowForm(true); setEditId(null); setForm({ nom: '', categorie: 'the', unite: 'kg', description: '' }) }}
+          onClick={() => { setShowForm(true); setEditId(null); setForm({ nom: '', categorie: 'the', unite: 'kg', description: '', prix_achat: '' }) }}
           className="bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary-light transition"
         >
           + Ajouter
@@ -113,7 +123,7 @@ export default function MatieresPage() {
       {showForm && (
         <div className="bg-card rounded-lg shadow p-6 mb-6">
           <h2 className="font-semibold mb-4">{editId ? 'Modifier' : 'Nouvelle matière première'}</h2>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
             <input placeholder="Nom" value={form.nom} onChange={(e) => setForm({ ...form, nom: e.target.value })} className="border rounded-lg px-3 py-2" />
             <select value={form.categorie} onChange={(e) => setForm({ ...form, categorie: e.target.value })} className="border rounded-lg px-3 py-2">
               <option value="the">Thé</option>
@@ -121,6 +131,7 @@ export default function MatieresPage() {
               <option value="emballage">Emballage</option>
             </select>
             <input placeholder="Unité (kg, unités, litres...)" value={form.unite} onChange={(e) => setForm({ ...form, unite: e.target.value })} className="border rounded-lg px-3 py-2" />
+            <input type="number" step="0.01" min="0" placeholder="Prix d'achat (€ HT / unité)" value={form.prix_achat} onChange={(e) => setForm({ ...form, prix_achat: e.target.value })} className="border rounded-lg px-3 py-2" />
             <input placeholder="Description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="border rounded-lg px-3 py-2" />
           </div>
           <div className="flex gap-2 mt-4">
@@ -140,6 +151,7 @@ export default function MatieresPage() {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nom</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Catégorie</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Unité</th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Prix d&apos;achat</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Fiches tech.</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
@@ -156,6 +168,11 @@ export default function MatieresPage() {
                       </span>
                     </td>
                     <td className="px-6 py-4 text-gray-500">{m.unite}</td>
+                    <td className="px-6 py-4 text-right text-sm">
+                      {m.prix_achat != null
+                        ? <span className="font-medium">{Number(m.prix_achat).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €/{m.unite}</span>
+                        : <span className="text-gray-400">-</span>}
+                    </td>
                     <td className="px-6 py-4">
                       {docCounts[m.id] ? (
                         <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-sm font-medium">
@@ -176,7 +193,7 @@ export default function MatieresPage() {
                   </tr>
                   {expandedId === m.id && (
                     <tr key={`${m.id}-docs`}>
-                      <td colSpan={6} className="px-6 py-4 bg-gray-50/50">
+                      <td colSpan={7} className="px-6 py-4 bg-gray-50/50">
                         <DocumentManager
                           entityType="matiere_premiere"
                           entityId={m.id}
@@ -188,7 +205,7 @@ export default function MatieresPage() {
                 </>
               ))}
               {matieres.length === 0 && (
-                <tr><td colSpan={6} className="px-6 py-8 text-center text-gray-400">Aucune matière première</td></tr>
+                <tr><td colSpan={7} className="px-6 py-8 text-center text-gray-400">Aucune matière première</td></tr>
               )}
             </tbody>
           </table>

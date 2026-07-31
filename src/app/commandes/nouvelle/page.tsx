@@ -246,15 +246,6 @@ export default function NouvelleCommandePage() {
       return
     }
 
-    // Mémorise le dernier prix d'achat saisi comme prix par défaut de la matière
-    for (const l of lignes) {
-      if (l.prix_unitaire == null) continue
-      const item = items.find(i => i.matiere_premiere_id === l.matiere_premiere_id)
-      if (item && item.prixDefaut !== l.prix_unitaire) {
-        await supabase.from('matieres_premieres').update({ prix_achat: l.prix_unitaire }).eq('id', l.matiere_premiere_id)
-      }
-    }
-
     toast('success', `Commande ${numero} créée`)
     router.push(`/commandes/voir?id=${commande.id}`)
   }
