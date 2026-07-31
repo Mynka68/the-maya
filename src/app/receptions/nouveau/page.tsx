@@ -7,6 +7,7 @@ import DocumentManager from '@/components/DocumentManager'
 import { useFeedback } from '@/components/Feedback'
 
 interface Fournisseur { id: string; nom: string }
+interface CommandeOption { id: string; numero: string; date_commande: string; statut: string; fournisseur_id: string | null; fournisseurs: { nom: string } | null }
 interface Matiere { id: string; nom: string; categorie: string; unite: string }
 interface LotForm {
   id?: string
@@ -59,14 +60,19 @@ export default function ReceptionFormPage() {
   const [lotsToDelete, setLotsToDelete] = useState<string[]>([])
   const [importing, setImporting] = useState(false)
   const [importedFile, setImportedFile] = useState<File | null>(null)
+  const [commandes, setCommandes] = useState<CommandeOption[]>([])
+  const [commandeId, setCommandeId] = useState('')
 
   useEffect(() => {
     Promise.all([
       supabase.from('fournisseurs').select('id, nom').order('nom'),
       supabase.from('matieres_premieres').select('id, nom, categorie, unite').order('nom'),
-    ]).then(([f, m]) => {
+      supabase.from('commandes_fournisseur').select('id, numero, date_commande, statut, fournisseur_id, fournisseurs(nom)')
+        .in('statut', ['brouillon', 'envoyee']).order('date_commande', { ascending: false }),
+    ]).then(([f, m, c]) => {
       setFournisseurs(f.data || [])
       setMatieres(m.data || [])
+      setCommandes((c.data as unknown as CommandeOption[]) || [])
     })
 
     if (editId) {
@@ -91,6 +97,7 @@ export default function ReceptionFormPage() {
     setDateReception(reception.date_reception)
     setNumeroBl(reception.numero_bl || '')
     setNotes(reception.notes || '')
+    setCommandeId(reception.commande_id || '')
 
     const { data: lotsData } = await supabase
       .from('lots')
@@ -220,6 +227,7 @@ export default function ReceptionFormPage() {
         date_reception: dateReception,
         numero_bl: numeroBl || null,
         notes: notes || null,
+        commande_id: commandeId || null,
       }).eq('id', editId)
 
       if (error) {
@@ -285,6 +293,7 @@ export default function ReceptionFormPage() {
         date_reception: dateReception,
         numero_bl: numeroBl || null,
         notes: notes || null,
+        commande_id: commandeId || null,
       }).select().single()
 
       if (error || !reception) {
@@ -394,6 +403,31 @@ export default function ReceptionFormPage() {
             <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
             <input value={notes} onChange={(e) => setNotes(e.target.value)} className="border rounded-lg px-3 py-2 w-full" />
           </div>
+        </div>
+
+        {/* Rapprochement avec une commande fournisseur */}
+        <div className="mt-4">
+          <label className="block text-sm font-medium text-gray-700 mb-1">Commande fournisseur liée (rapprochement)</label>
+          <select
+            value={commandeId}
+            onChange={(e) => {
+              const v = e.target.value
+              setCommandeId(v)
+              const cmd = commandes.find(c => c.id === v)
+              if (cmd?.fournisseur_id) setFournisseurId(cmd.fournisseur_id)
+            }}
+            className="border rounded-lg px-3 py-2 w-full max-w-lg"
+          >
+            <option value="">-- Aucune (réception libre) --</option>
+            {commandes.map(c => (
+              <option key={c.id} value={c.id}>
+                {c.numero} — {c.fournisseurs?.nom || '?'} — {c.date_commande}{c.statut === 'brouillon' ? ' (brouillon)' : ''}
+              </option>
+            ))}
+          </select>
+          <p className="text-xs text-gray-400 mt-1">
+            En rattachant la réception à une commande, le suivi des reliquats (commandé vs reçu) se met à jour sur la fiche de la commande.
+          </p>
         </div>
       </div>
 
