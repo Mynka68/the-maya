@@ -184,7 +184,9 @@ export default function InventairePage() {
             <th colSpan={7} className="band-cell">
               <div className="report-band">
                 <div className="report-band-left">
-                  <div className="report-band-title">🍵 THÉ MAYA — RAPPORT D&apos;INVENTAIRE</div>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src="/logo-horizontal-noir.svg" alt="Thé Maya" className="report-band-logo" />
+                  <div className="report-band-title">RAPPORT D&apos;INVENTAIRE</div>
                   <div className="report-band-sub">Contrôle physique des stocks de matières premières</div>
                 </div>
                 <div className="report-band-right">

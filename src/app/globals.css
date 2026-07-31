@@ -32,7 +32,8 @@ body {
   display: flex; align-items: flex-end; justify-content: space-between;
   gap: 16px; border-bottom: 2.5px solid #14532d; padding-bottom: 6px;
 }
-.report-band-title { font-size: 15px; font-weight: 800; letter-spacing: .02em; color: #14532d; }
+.report-band-logo { height: 26px; width: auto; margin-bottom: 4px; }
+.report-band-title { font-size: 14px; font-weight: 800; letter-spacing: .04em; color: #14532d; }
 .report-band-sub { font-size: 10px; color: #4b5563; margin-top: 2px; }
 .report-band-right { text-align: right; font-size: 10px; color: #374151; line-height: 1.5; white-space: nowrap; }
 .report-band-right strong { color: #111827; }
@@ -59,7 +60,7 @@ body {
     size: A4 portrait;
     margin: 12mm 9mm 15mm 9mm;
     @bottom-left {
-      content: "🍵 Thé Maya";
+      content: "Thé Maya — themaya.fr";
       font-family: ui-sans-serif, system-ui, sans-serif;
       font-size: 8px; color: #6b7280;
     }

@@ -20,7 +20,8 @@ export default function AuthenticatedLayout({ children }: { children: React.Reac
     return (
       <div className="min-h-screen flex items-center justify-center bg-bg">
         <div className="text-center">
-          <p className="text-xl font-bold text-primary-dark mb-2">🍵 Thé Maya</p>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo-vertical-noir.svg" alt="Thé Maya" className="h-28 w-auto mx-auto mb-4" />
           <p className="text-gray-500">Chargement...</p>
         </div>
       </div>

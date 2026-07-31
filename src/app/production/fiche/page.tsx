@@ -104,8 +104,9 @@ export default function FicheProductionPage() {
         <div className="border-b-2 border-gray-800 pb-4 mb-6">
           <div className="flex justify-between items-start">
             <div>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/logo-horizontal-noir.svg" alt="Thé Maya" className="h-7 w-auto mb-2" />
               <h1 className="text-2xl font-bold">FICHE DE PRODUCTION</h1>
-              <p className="text-sm text-gray-600 mt-1">The Maya</p>
             </div>
             <div className="text-right text-sm">
               <p><strong>Date :</strong> {production.date_production}</p>

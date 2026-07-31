@@ -26,8 +26,9 @@ export default function Sidebar() {
   return (
     <aside className="w-64 bg-sidebar text-white min-h-screen flex flex-col fixed left-0 top-0">
       <div className="p-6 border-b border-white/10">
-        <h1 className="text-xl font-bold tracking-wide">🍵 Thé Maya</h1>
-        <p className="text-xs text-white/60 mt-1">Gestion de production</p>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/logo-horizontal-blanc.svg" alt="Thé Maya" className="h-8 w-auto" />
+        <p className="text-xs text-white/60 mt-2">Gestion de production</p>
       </div>
       <nav className="flex-1 py-4">
         {navItems

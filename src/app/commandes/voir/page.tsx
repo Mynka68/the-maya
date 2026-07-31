@@ -236,7 +236,9 @@ export default function VoirCommandePage() {
             <th colSpan={hasPrix ? 6 : 4} className="band-cell">
               <div className="report-band">
                 <div className="report-band-left">
-                  <div className="report-band-title">🍵 THÉ MAYA — BON DE COMMANDE</div>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src="/logo-horizontal-noir.svg" alt="Thé Maya" className="report-band-logo" />
+                  <div className="report-band-title">BON DE COMMANDE</div>
                   <div className="report-band-sub">N° {commande.numero}</div>
                 </div>
                 <div className="report-band-right">
