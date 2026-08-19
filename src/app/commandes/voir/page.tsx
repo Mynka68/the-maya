@@ -150,6 +150,11 @@ export default function VoirCommandePage() {
                 ✉️ Email au fournisseur
               </a>
             )}
+            {(commande.statut === 'brouillon' || commande.statut === 'envoyee') && (
+              <Link href={`/commandes/nouvelle?id=${commande.id}`} className="bg-gray-700 text-white px-4 py-2 rounded-lg hover:bg-gray-800 transition">
+                ✏️ Modifier
+              </Link>
+            )}
             {commande.statut === 'brouillon' && (
               <button onClick={() => setStatut('envoyee')} className="bg-blue-100 text-blue-800 px-4 py-2 rounded-lg hover:bg-blue-200 transition">
                 Marquer envoyée

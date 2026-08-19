@@ -102,6 +102,9 @@ export default function CommandesPage() {
                   </td>
                   <td className="px-6 py-4 text-right text-sm">
                     <Link href={`/commandes/voir?id=${c.id}`} className="text-primary hover:underline mr-3">Voir / PDF</Link>
+                    {(c.statut === 'brouillon' || c.statut === 'envoyee') && (
+                      <Link href={`/commandes/nouvelle?id=${c.id}`} className="text-gray-600 hover:underline mr-3">Modifier</Link>
+                    )}
                     {c.statut === 'brouillon' && (
                       <button onClick={() => remove(c.id, c.numero)} className="text-red-500 hover:underline">Supprimer</button>
                     )}

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useFeedback } from '@/components/Feedback'
 import { splitRef } from '@/lib/refs'
 
@@ -41,7 +41,11 @@ const categorieLabels: Record<string, string> = { the: 'Thé', ingredient: 'Ingr
 export default function NouvelleCommandePage() {
   const router = useRouter()
   const { toast } = useFeedback()
+  const searchParams = useSearchParams()
+  const editId = searchParams.get('id')
+  const isEdit = !!editId
 
+  const [numeroEdit, setNumeroEdit] = useState<string | null>(null)
   const [fournisseurs, setFournisseurs] = useState<Fournisseur[]>([])
   const [fournisseurId, setFournisseurId] = useState('')
   const [dateCommande, setDateCommande] = useState(new Date().toISOString().split('T')[0])
@@ -62,12 +66,14 @@ export default function NouvelleCommandePage() {
       supabase.from('production_lots')
         .select('quantite_utilisee, lots!inner(matiere_premiere_id), productions!inner(date_production)')
         .gte('productions.date_production', date90),
-    ]).then(([fRes, pRes, mRes, lRes, consoRes]) => {
+    ]).then(async ([fRes, pRes, mRes, lRes, consoRes]) => {
       const fs = fRes.data || []
       setFournisseurs(fs)
-      // Alveus par défaut s'il existe
-      const alveus = fs.find(f => f.nom.toUpperCase().includes('ALVEUS'))
-      if (alveus) setFournisseurId(alveus.id)
+      // Alveus par défaut s'il existe (création uniquement)
+      if (!editId) {
+        const alveus = fs.find(f => f.nom.toUpperCase().includes('ALVEUS'))
+        if (alveus) setFournisseurId(alveus.id)
+      }
 
       const stocks = new Map<string, number>()
       for (const l of (lRes.data as unknown as { matiere_premiere_id: string; quantite_restante: number }[]) || []) {
@@ -115,9 +121,42 @@ export default function NouvelleCommandePage() {
         list.push(buildItem(m.id, null, m.nom, m.unite, m.categorie))
       }
       setItems(list)
+
+      // Mode édition : charge la commande existante et pré-remplit la sélection
+      if (editId) {
+        const { data: cmd } = await supabase
+          .from('commandes_fournisseur')
+          .select('numero, fournisseur_id, date_commande, statut, notes, commande_lignes(matiere_premiere_id, quantite, prix_unitaire)')
+          .eq('id', editId)
+          .single()
+        if (!cmd) {
+          toast('error', 'Commande introuvable')
+          router.push('/commandes')
+          return
+        }
+        if (cmd.statut === 'recue' || cmd.statut === 'annulee') {
+          toast('error', `Une commande « ${cmd.statut === 'recue' ? 'reçue' : 'annulée'} » ne peut plus être modifiée`)
+          router.push(`/commandes/voir?id=${editId}`)
+          return
+        }
+        setNumeroEdit(cmd.numero)
+        setFournisseurId(cmd.fournisseur_id || '')
+        setDateCommande(cmd.date_commande)
+        setNotes(cmd.notes || '')
+        const sel: Record<string, { qty: string; prix: string }> = {}
+        for (const l of (cmd.commande_lignes as { matiere_premiere_id: string; quantite: number; prix_unitaire: number | null }[]) || []) {
+          sel[l.matiere_premiere_id] = {
+            qty: String(l.quantite),
+            prix: l.prix_unitaire != null ? String(l.prix_unitaire) : '',
+          }
+        }
+        setSelection(sel)
+      }
+
       setLoading(false)
     })
-  }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editId])
 
   const filteredItems = useMemo(() => {
     const term = search.trim().toLowerCase()
@@ -215,6 +254,39 @@ export default function NouvelleCommandePage() {
     }
 
     setSaving(true)
+
+    if (isEdit && editId) {
+      // Mise à jour : entête + remplacement des lignes (numéro et statut conservés)
+      const { error } = await supabase.from('commandes_fournisseur').update({
+        fournisseur_id: fournisseurId,
+        date_commande: dateCommande,
+        notes: notes || null,
+      }).eq('id', editId)
+      if (error) {
+        toast('error', `Erreur lors de la modification : ${error.message}`)
+        setSaving(false)
+        return
+      }
+
+      const { error: delError } = await supabase.from('commande_lignes').delete().eq('commande_id', editId)
+      if (delError) {
+        toast('error', `Erreur lors de la mise à jour des lignes : ${delError.message}`)
+        setSaving(false)
+        return
+      }
+      const { error: insError } = await supabase.from('commande_lignes').insert(
+        lignes.map(l => ({ commande_id: editId, ...l }))
+      )
+      if (insError) {
+        toast('error', `Erreur sur les lignes : ${insError.message}`)
+        setSaving(false)
+        return
+      }
+
+      toast('success', `Commande ${numeroEdit || ''} modifiée`)
+      router.push(`/commandes/voir?id=${editId}`)
+      return
+    }
 
     // Numéro séquentiel : BC-ANNEE-XXX
     const year = new Date().getFullYear()
@@ -330,7 +402,9 @@ export default function NouvelleCommandePage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-primary-dark mb-6">Nouvelle commande fournisseur</h1>
+      <h1 className="text-2xl font-bold text-primary-dark mb-6">
+        {isEdit ? `Modifier la commande ${numeroEdit || ''}` : 'Nouvelle commande fournisseur'}
+      </h1>
 
       <div className="bg-card rounded-lg shadow p-6 mb-6">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -399,11 +473,11 @@ export default function NouvelleCommandePage() {
           {totalHT > 0 && <> — <strong>{totalHT.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} € HT</strong></>}
         </p>
         <div className="flex gap-3">
-          <button onClick={() => router.push('/commandes')} className="bg-gray-200 px-5 py-2 rounded-lg hover:bg-gray-300">
+          <button onClick={() => router.push(isEdit ? `/commandes/voir?id=${editId}` : '/commandes')} className="bg-gray-200 px-5 py-2 rounded-lg hover:bg-gray-300">
             Annuler
           </button>
           <button onClick={save} disabled={saving} className="bg-primary text-white px-5 py-2 rounded-lg hover:bg-primary-light transition disabled:opacity-50">
-            {saving ? 'Création...' : 'Créer le bon de commande'}
+            {saving ? 'Enregistrement...' : isEdit ? 'Enregistrer les modifications' : 'Créer le bon de commande'}
           </button>
         </div>
       </div>
