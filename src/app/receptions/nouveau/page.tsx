@@ -15,7 +15,6 @@ interface LotForm {
   numero_lot: string
   quantite_recue: string
   quantite_restante?: number
-  consommee?: number
   date_fabrication: string
   date_peremption: string
   notes: string
@@ -112,7 +111,6 @@ export default function ReceptionFormPage() {
         numero_lot: l.numero_lot,
         quantite_recue: String(l.quantite_recue),
         quantite_restante: l.quantite_restante,
-        consommee: l.quantite_recue - l.quantite_restante,
         date_fabrication: l.date_fabrication || '',
         date_peremption: l.date_peremption,
         notes: l.notes || '',
@@ -246,12 +244,27 @@ export default function ReceptionFormPage() {
         }
       }
 
+      // Consommation réelle relue AU MOMENT de l'enregistrement (source de vérité :
+      // production_lots) — et non au chargement de la page, sinon une production
+      // faite pendant que le formulaire est ouvert serait effacée du restant.
+      const existingIds = lots.filter(l => l.id).map(l => l.id as string)
+      const consoMap = new Map<string, number>()
+      if (existingIds.length > 0) {
+        const { data: consoData } = await supabase
+          .from('production_lots')
+          .select('lot_id, quantite_utilisee')
+          .in('lot_id', existingIds)
+        for (const row of (consoData as { lot_id: string; quantite_utilisee: number }[]) || []) {
+          consoMap.set(row.lot_id, (consoMap.get(row.lot_id) || 0) + Number(row.quantite_utilisee))
+        }
+      }
+
       // Update existing lots and insert new ones
       for (const lot of lots) {
         if (lot.id) {
           // La quantité restante suit la nouvelle quantité reçue moins ce qui a déjà été consommé
           const newRecue = parseFloat(lot.quantite_recue)
-          const consommee = lot.consommee ?? 0
+          const consommee = consoMap.get(lot.id) || 0
           const { error: updError } = await supabase.from('lots').update({
             matiere_premiere_id: lot.matiere_premiere_id,
             numero_lot: lot.numero_lot,
