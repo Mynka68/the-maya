@@ -16,6 +16,28 @@ function isLocal(host: string): boolean {
   return host.startsWith('localhost') || host.startsWith('127.0.0.1')
 }
 
+// Lit les cookies depuis l'en-tête brut en dédoublonnant par nom : un ancien cookie de session
+// « host-only » (résidu, sans domaine) de même nom que le cookie partagé .apps.mynoa.fr peut
+// masquer la vraie session côté serveur → renvoi au Hub en boucle. On garde la vraie session.
+function readSharedCookies(req: NextRequest): { name: string; value: string }[] {
+  const looksValid = (v: string) =>
+    v.startsWith('base64-') || v.startsWith('ey') || v.startsWith('[') || v.startsWith('{')
+  const map = new Map<string, string>()
+  for (const part of (req.headers.get('cookie') || '').split(';')) {
+    const i = part.indexOf('=')
+    if (i < 0) continue
+    const name = part.slice(0, i).trim()
+    if (!name) continue
+    let value = part.slice(i + 1).trim()
+    try { value = decodeURIComponent(value) } catch { /* garde la valeur brute */ }
+    const existing = map.get(name)
+    if (existing === undefined || (!looksValid(existing) && looksValid(value))) {
+      map.set(name, value)
+    }
+  }
+  return Array.from(map, ([name, value]) => ({ name, value }))
+}
+
 export async function ssoGate(req: NextRequest, appUrl: string): Promise<NextResponse> {
   const host = req.headers.get('host') || ''
   if (isLocal(host)) return NextResponse.next({ request: req })
@@ -30,7 +52,7 @@ export async function ssoGate(req: NextRequest, appUrl: string): Promise<NextRes
   const res = NextResponse.next({ request: req })
   const supabase = createServerClient(HUB_SUPABASE_URL, HUB_ANON, {
     cookies: {
-      getAll: () => req.cookies.getAll(),
+      getAll: () => readSharedCookies(req),
       setAll: (
         cookiesToSet: { name: string; value: string; options: CookieOptions }[],
       ) => {
